@@ -11,6 +11,7 @@
 - [ ] `pdf-fixture-qdf --version`
 - [ ] `pdf-inventory --version`
 - [ ] `pdf-inventory <sample.pdf> --probe <search> <replacement> --summary`
+- [ ] `pdf-inventory <sample.pdf> --max-input-bytes <bytes>`
 
 ## Privacy
 

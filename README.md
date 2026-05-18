@@ -142,6 +142,19 @@ Use `--summary` to include aggregate counts by inventory status and probe
 status. The JSON output becomes an object with `rows` and `summary`; TSV remains
 row-oriented.
 
+Use `--max-input-bytes` to skip QDF conversion for very large PDFs during broad
+corpus scans:
+
+```bash
+pdf-inventory work/dogfood-pdfs/sample-*.pdf \
+  --max-input-bytes 50000000 \
+  --summary
+```
+
+Skipped PDFs are reported with `status: "skipped"` and still contribute to the
+summary counts. This avoids expanding large inputs into much larger QDF files
+unless explicitly needed.
+
 ## Validation
 
 Run the source-level tests:
