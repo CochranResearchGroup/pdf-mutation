@@ -502,6 +502,40 @@ class PdfDogfoodTests(unittest.TestCase):
         )
         self.assertIn("work/dogfood-pdfs/inventory/dogfood-readiness.json", argv)
 
+    def test_policy_metadata_records_effective_policy_without_probe_literals(self):
+        args = d.parse_args(["--policy", "readiness", "--probe", "3807", "8304"])
+        args.pdfs = [p.Path("work/dogfood-pdfs/sample-01.pdf")]
+
+        metadata = d.policy_metadata(args)
+
+        self.assertEqual(metadata["tool"], "pdf-dogfood")
+        self.assertEqual(metadata["policy"], "readiness")
+        self.assertEqual(metadata["selected_policy"], "readiness")
+        self.assertEqual(
+            metadata["fail_on"],
+            [
+                "error",
+                "unsupported",
+                "skipped",
+                "probe-unsupported",
+                "probe-no-match",
+                "probe-infeasible",
+            ],
+        )
+        self.assertEqual(metadata["input_count"], 1)
+        self.assertEqual(metadata["probe"]["search_length"], 4)
+        self.assertNotIn("3807", str(metadata))
+        self.assertNotIn("8304", str(metadata))
+
+    def test_policy_metadata_marks_overrides(self):
+        args = d.parse_args(["--policy", "complete", "--fail-on", "error"])
+
+        metadata = d.policy_metadata(args)
+
+        self.assertEqual(metadata["policy"], "custom")
+        self.assertEqual(metadata["selected_policy"], "complete")
+        self.assertEqual(metadata["fail_on"], ["error"])
+
     def test_expand_pdf_args_expands_globs(self):
         with p.tempfile.TemporaryDirectory() as tmp:
             root = p.Path(tmp)

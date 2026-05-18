@@ -186,6 +186,9 @@ By default, `pdf-dogfood` scans `work/dogfood-pdfs/sample-*.pdf`, writes
 Use `--policy complete` to fail on skipped files as well, or
 `--policy readiness --probe SEARCH REPLACEMENT` to require a clean supported
 probe match.
+Dogfood JSON reports include a `policy` block with the wrapper version,
+selected policy, effective fail-on rules, size guard, input glob, report paths,
+and hashed probe metadata.
 
 ## Validation
 

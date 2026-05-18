@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
+import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pdf_glyph_replace as glyph
 import pdf_inventory
@@ -80,6 +83,62 @@ def build_inventory_argv(args: argparse.Namespace) -> list[str]:
     return inventory_args
 
 
+def policy_name(args: argparse.Namespace) -> str:
+    """Return the effective policy label for report metadata."""
+    if args.no_fail_on:
+        return "none"
+    if args.fail_on is not None:
+        return "custom"
+    return args.policy
+
+
+def report_paths(args: argparse.Namespace) -> tuple[Path, Path]:
+    stem = output_name(args)
+    return args.output_dir / f"{stem}.json", args.output_dir / f"{stem}.tsv"
+
+
+def policy_metadata(args: argparse.Namespace) -> dict[str, Any]:
+    """Return non-sensitive metadata for a dogfood report."""
+    metadata: dict[str, Any] = {
+        "tool": "pdf-dogfood",
+        "version": __version__,
+        "policy": policy_name(args),
+        "selected_policy": args.policy,
+        "fail_on": selected_fail_on(args),
+        "max_input_bytes": args.max_input_bytes,
+        "align": args.align,
+        "output_name": output_name(args),
+        "input_globs": [str(pdf) for pdf in args.original_pdfs],
+        "input_count": len(args.pdfs),
+        "json_path": str(report_paths(args)[0]),
+        "tsv_path": str(report_paths(args)[1]),
+    }
+    if args.probe:
+        metadata["probe"] = {
+            "search_length": len(args.probe[0]),
+            "replacement_length": len(args.probe[1]),
+            "search_sha256_12": hashlib.sha256(args.probe[0].encode("utf-8")).hexdigest()[:12],
+            "replacement_sha256_12": hashlib.sha256(
+                args.probe[1].encode("utf-8")
+            ).hexdigest()[:12],
+        }
+    return metadata
+
+
+def write_outputs(
+    rows: list[dict[str, Any]],
+    *,
+    json_path: Path,
+    tsv_path: Path,
+    summary: dict[str, Any],
+    policy: dict[str, Any],
+) -> None:
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"policy": policy, "rows": rows, "summary": summary}
+    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    pdf_inventory.write_outputs(rows, json_path=None, tsv_path=tsv_path, summary=summary)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the canonical pdf-mutation dogfood inventory gate."
@@ -139,7 +198,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="disable fail-on policy and run report-only inventory",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    args.original_pdfs = list(args.pdfs)
+    return args
 
 
 def expand_pdf_args(pdfs: list[Path]) -> list[Path]:
@@ -157,7 +218,30 @@ def expand_pdf_args(pdfs: list[Path]) -> list[Path]:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     args.pdfs = expand_pdf_args(args.pdfs)
-    return pdf_inventory.main(build_inventory_argv(args))
+    glyph.require_tool("qpdf")
+    rows = [
+        pdf_inventory.inventory_pdf(
+            pdf,
+            probe=tuple(args.probe) if args.probe else None,
+            align=args.align,
+            max_input_bytes=args.max_input_bytes,
+        )
+        for pdf in args.pdfs
+    ]
+    summary = pdf_inventory.build_summary(rows)
+    json_path, tsv_path = report_paths(args)
+    write_outputs(
+        rows,
+        json_path=json_path,
+        tsv_path=tsv_path,
+        summary=summary,
+        policy=policy_metadata(args),
+    )
+    matches = pdf_inventory.fail_on_matches(rows, selected_fail_on(args))
+    if matches:
+        pdf_inventory.print_fail_on_matches(matches)
+        return 2
+    return 1 if any(row["status"] == "error" for row in rows) else 0
 
 
 if __name__ == "__main__":

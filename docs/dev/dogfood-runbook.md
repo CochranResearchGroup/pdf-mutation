@@ -14,6 +14,9 @@ reports under `work/dogfood-pdfs/inventory/`, applies `--max-input-bytes
 50000000`, and uses the routine fail-on policy from this runbook.
 Use `--policy complete` or `--policy readiness` to select the other runbook
 gate profiles.
+Every `pdf-dogfood` JSON report includes a `policy` metadata block that records
+the wrapper version, selected policy, effective fail-on rules, size guard,
+input glob, report paths, and hashed probe metadata.
 
 ## Corpus Location
 
