@@ -4,6 +4,7 @@ import unittest
 import unittest.mock
 
 import pdf_dogfood as d
+import pdf_dogfood_summary as ds
 import pdf_fixture as f
 import pdf_glyph_replace as p
 import pdf_inventory as inv
@@ -582,6 +583,57 @@ class PdfDogfoodTests(unittest.TestCase):
             expanded = d.expand_pdf_args([root / "*.pdf"])
 
             self.assertEqual(expanded, [first, second])
+
+
+class PdfDogfoodSummaryTests(unittest.TestCase):
+    def test_rows_for_records_formats_manifest_counts(self):
+        records = [
+            {
+                "timestamp_unix": 123,
+                "exit_code": 2,
+                "policy": {
+                    "policy": "readiness",
+                    "selected_policy": "readiness",
+                    "json_path": "work/dogfood-pdfs/inventory/readiness.json",
+                },
+                "summary": {
+                    "total_pdfs": 2,
+                    "status_counts": {"supported": 1, "unsupported": 1},
+                    "probe_status_counts": {"no_match": 1, "unsupported": 1},
+                },
+                "fail_on_match_count": 2,
+                "fail_on_rules": ["probe-no-match", "unsupported"],
+            }
+        ]
+
+        rows = ds.rows_for_records(records)
+
+        self.assertEqual(
+            rows,
+            [
+                [
+                    "123",
+                    "2",
+                    "readiness",
+                    "readiness",
+                    "2",
+                    "supported=1,unsupported=1",
+                    "no_match=1,unsupported=1",
+                    "2",
+                    "probe-no-match,unsupported",
+                    "work/dogfood-pdfs/inventory/readiness.json",
+                ]
+            ],
+        )
+
+    def test_load_manifest_reads_jsonl(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            manifest = p.Path(tmp) / "manifest.jsonl"
+            manifest.write_text('{"a": 1}\n\n{"b": 2}\n', encoding="utf-8")
+
+            records = ds.load_manifest(manifest)
+
+            self.assertEqual(records, [{"a": 1}, {"b": 2}])
 
 
 if __name__ == "__main__":

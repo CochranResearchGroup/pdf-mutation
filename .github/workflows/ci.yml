@@ -25,7 +25,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Compile source
-        run: python -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_dogfood.py
+        run: python -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_dogfood.py pdf_dogfood_summary.py
 
       - name: Run tests
         run: python -m unittest discover -s tests -v
@@ -42,6 +42,7 @@ jobs:
           pdf-fixture-qdf --version
           pdf-inventory --version
           pdf-dogfood --version
+          pdf-dogfood-summary --version
 
       - name: Upload distributions
         uses: actions/upload-artifact@v7.0.1
