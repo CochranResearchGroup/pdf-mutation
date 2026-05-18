@@ -94,6 +94,17 @@ def filter_records(
     ]
 
 
+def latest_by_policy(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    latest: dict[str, dict[str, Any]] = {}
+    for record in records:
+        policy = str(record_value(record, ("policy", "policy")))
+        if not policy:
+            policy = str(record_value(record, ("policy", "selected_policy")))
+        if policy:
+            latest[policy] = record
+    return [latest[policy] for policy in sorted(latest)]
+
+
 def rows_for_records(records: list[dict[str, Any]]) -> list[list[str]]:
     rows: list[list[str]] = []
     for record in records:
@@ -171,6 +182,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=[],
         help="show only records with this process exit code; repeatable",
     )
+    parser.add_argument(
+        "--latest-by-policy",
+        action="store_true",
+        help="show only the latest matching manifest record for each policy",
+    )
     return parser.parse_args(argv)
 
 
@@ -186,7 +202,9 @@ def main(argv: list[str] | None = None) -> int:
         fail_only=args.fail_only,
         exit_codes=args.exit_code,
     )
-    if args.limit:
+    if args.latest_by_policy:
+        records = latest_by_policy(records)
+    elif args.limit:
         records = records[-args.limit :]
     if args.json:
         print(json.dumps(records, indent=2, sort_keys=True))

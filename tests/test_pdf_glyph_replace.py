@@ -667,9 +667,10 @@ class PdfDogfoodSummaryTests(unittest.TestCase):
             "probe_status_counts\tfail_matches\tfail_rules\tjson_path",
         )
         self.assertEqual(len(lines), 3)
-        self.assertIn("routine", lines[1])
-        self.assertIn("readiness", lines[2])
-        self.assertIn("probe-no-match,unsupported", lines[2])
+        self.assertIn("readiness", lines[1])
+        self.assertIn("probe-no-match,unsupported", lines[1])
+        self.assertIn("routine", lines[2])
+        self.assertIn("routine-latest.json", lines[2])
         self.assertNotIn("3807", output)
         self.assertNotIn("8304", output)
 
@@ -682,8 +683,8 @@ class PdfDogfoodSummaryTests(unittest.TestCase):
         payload = json.loads(stdout.getvalue())
         self.assertEqual(status, 0)
         self.assertEqual(len(payload), 1)
-        self.assertEqual(payload[0]["policy"]["policy"], "readiness")
-        self.assertEqual(payload[0]["fail_on_rules"], ["probe-no-match", "unsupported"])
+        self.assertEqual(payload[0]["policy"]["policy"], "routine")
+        self.assertEqual(payload[0]["policy"]["json_path"], "work/dogfood-pdfs/inventory/routine-latest.json")
 
     def test_main_filters_fixture_manifest_table(self):
         stdout = io.StringIO()
@@ -701,13 +702,47 @@ class PdfDogfoodSummaryTests(unittest.TestCase):
         stdout = io.StringIO()
 
         with contextlib.redirect_stdout(stdout):
-            status = ds.main([str(self.FIXTURE_MANIFEST), "--exit-code", "0", "--json"])
+            status = ds.main([str(self.FIXTURE_MANIFEST), "--exit-code", "0", "--limit", "1", "--json"])
 
         payload = json.loads(stdout.getvalue())
         self.assertEqual(status, 0)
         self.assertEqual(len(payload), 1)
         self.assertEqual(payload[0]["policy"]["policy"], "routine")
+        self.assertEqual(payload[0]["policy"]["json_path"], "work/dogfood-pdfs/inventory/routine-latest.json")
         self.assertEqual(payload[0]["exit_code"], 0)
+
+    def test_latest_by_policy_keeps_last_record_for_each_policy(self):
+        records = ds.load_manifest(self.FIXTURE_MANIFEST)
+
+        latest = ds.latest_by_policy(records)
+
+        self.assertEqual([record["policy"]["policy"] for record in latest], ["readiness", "routine"])
+        self.assertEqual(latest[0]["policy"]["json_path"], "work/dogfood-pdfs/inventory/readiness.json")
+        self.assertEqual(latest[1]["policy"]["json_path"], "work/dogfood-pdfs/inventory/routine-latest.json")
+
+    def test_main_prints_latest_by_policy_table(self):
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            status = ds.main([str(self.FIXTURE_MANIFEST), "--latest-by-policy"])
+
+        lines = stdout.getvalue().splitlines()
+        self.assertEqual(status, 0)
+        self.assertEqual(len(lines), 3)
+        self.assertIn("readiness", lines[1])
+        self.assertIn("routine-latest.json", lines[2])
+
+    def test_main_prints_latest_by_policy_json_after_filters(self):
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            status = ds.main([str(self.FIXTURE_MANIFEST), "--latest-by-policy", "--exit-code", "0", "--json"])
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(status, 0)
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["policy"]["policy"], "routine")
+        self.assertEqual(payload[0]["policy"]["json_path"], "work/dogfood-pdfs/inventory/routine-latest.json")
 
 
 if __name__ == "__main__":
