@@ -31,6 +31,13 @@ pdf-dogfood-summary --fail-only --policy readiness
 pdf-dogfood-summary --exit-code 2 --json
 ```
 
+The GitHub Actions CI workflow also exposes a manual `Dogfood manifest health`
+job through `workflow_dispatch`. It defaults to the checked-in synthetic
+manifest fixture and accepts a `dogfood_manifest` path input. The job reports
+the `--health` exit status as a workflow notice but exits successfully, so it is
+available for operator inspection without blocking normal CI or requiring
+private PDFs in the repository.
+
 ## Corpus Location
 
 Keep dogfood PDFs under the ignored scratch tree:
