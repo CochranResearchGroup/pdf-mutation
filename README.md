@@ -169,6 +169,9 @@ to stderr. Available rules are `error`, `unsupported`, `skipped`,
 `qpdf-check-failed`, `qdf-conversion-failed`, `probe-unsupported`,
 `probe-no-match`, `probe-infeasible`, `probe-feasible`, and `probe-match`.
 
+For repeatable local corpus checks, see
+`docs/dev/dogfood-runbook.md`.
+
 ## Validation
 
 Run the source-level tests:
