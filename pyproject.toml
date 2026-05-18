@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdf-mutation"
+version = "0.1.0"
+description = "Deterministic glyph-preserving PDF text replacement CLI"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Cochran Research Group" }
+]
+keywords = ["pdf", "qdf", "glyph", "text-replacement"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Text Processing",
+  "Topic :: Utilities"
+]
+
+[project.scripts]
+pdf-glyph-replace = "pdf_glyph_replace:main"
+
+[tool.setuptools]
+py-modules = ["pdf_glyph_replace"]

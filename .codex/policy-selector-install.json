@@ -1,0 +1,23 @@
+{
+  "install_relpath": ".codex/skills/repo-policy-selector",
+  "installed_bundle_release": {
+    "bundle_name": "repo-policy-selector",
+    "bundle_version": "0.1.13",
+    "policy_library": {
+      "catalog_path": "policy-library/catalog.yaml",
+      "content_sha256": "2bc6622358be86d910b7fc404cac93df0d0b495ae904d44a4a5a0956355fec09",
+      "relative_root": "policy-library",
+      "schema_path": "policy-library/SCHEMA.md"
+    },
+    "release_ref": "v0.1.13",
+    "schema_version": 1,
+    "source_commit": "b38c90694e15562819d28a4338c5d148dc5171fd",
+    "source_ref": "b38c90694e15562819d28a4338c5d148dc5171fd",
+    "source_repo_root": "/home/ecochran76/workspace.local/agent-policies",
+    "source_tree_state": "clean-ref"
+  },
+  "installed_policy_root": "/home/ecochran76/workspace.local/pdf-mutation/.codex/skills/repo-policy-selector/policy-library",
+  "installed_selector_root": "/home/ecochran76/workspace.local/pdf-mutation/.codex/skills/repo-policy-selector",
+  "selector_root": "/home/ecochran76/workspace.local/agent-policies/repo-policy-selector",
+  "source_type": "local-path"
+}

@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Generated PDF mutation scratch artifacts.
+work/
+
+# Local/private PDF inputs and outputs used for manual smoke testing.
+tmp*.pdf
