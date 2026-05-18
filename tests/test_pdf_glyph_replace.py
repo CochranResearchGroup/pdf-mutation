@@ -536,6 +536,41 @@ class PdfDogfoodTests(unittest.TestCase):
         self.assertEqual(metadata["selected_policy"], "complete")
         self.assertEqual(metadata["fail_on"], ["error"])
 
+    def test_manifest_record_is_compact_and_non_literal(self):
+        args = d.parse_args(["--probe", "3807", "8304"])
+        args.pdfs = [p.Path("work/dogfood-pdfs/sample-01.pdf")]
+        policy = d.policy_metadata(args)
+        summary = {
+            "total_pdfs": 1,
+            "status_counts": {"supported": 1},
+            "reason_counts": {"decoded Type0 ToUnicode font resources found": 1},
+            "probe_status_counts": {"no_match": 1},
+            "probe_total_matches": 0,
+            "probe_feasible_pdfs": 0,
+            "qpdf_check_failed": 0,
+            "qdf_conversion_failed": 0,
+        }
+
+        record = d.manifest_record(policy=policy, summary=summary, matches=[], exit_code=0)
+
+        self.assertEqual(record["tool"], "pdf-dogfood")
+        self.assertEqual(record["exit_code"], 0)
+        self.assertEqual(record["summary"]["status_counts"], {"supported": 1})
+        self.assertEqual(record["fail_on_match_count"], 0)
+        self.assertNotIn("rows", record)
+        self.assertNotIn("3807", str(record))
+        self.assertNotIn("8304", str(record))
+
+    def test_append_manifest_writes_jsonl(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            path = p.Path(tmp) / "manifest.jsonl"
+            d.append_manifest(path, {"b": 2, "a": 1})
+            d.append_manifest(path, {"c": 3})
+
+            lines = path.read_text().splitlines()
+
+            self.assertEqual(lines, ['{"a": 1, "b": 2}', '{"c": 3}'])
+
     def test_expand_pdf_args_expands_globs(self):
         with p.tempfile.TemporaryDirectory() as tmp:
             root = p.Path(tmp)

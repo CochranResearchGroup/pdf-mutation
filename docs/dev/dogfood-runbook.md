@@ -17,6 +17,9 @@ gate profiles.
 Every `pdf-dogfood` JSON report includes a `policy` metadata block that records
 the wrapper version, selected policy, effective fail-on rules, size guard,
 input glob, report paths, and hashed probe metadata.
+Add `--manifest` to append one compact JSONL run history record. With no path
+argument, the manifest is written to
+`work/dogfood-pdfs/inventory/dogfood-manifest.jsonl`.
 
 ## Corpus Location
 
@@ -85,7 +88,7 @@ For routine dogfood, fail only on hard processing errors or a probe that finds a
 feasible mutation target:
 
 ```bash
-pdf-dogfood --probe 3807 8304
+pdf-dogfood --probe 3807 8304 --manifest
 ```
 
 Equivalent explicit `pdf-inventory` command:

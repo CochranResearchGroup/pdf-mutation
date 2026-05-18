@@ -189,6 +189,8 @@ probe match.
 Dogfood JSON reports include a `policy` block with the wrapper version,
 selected policy, effective fail-on rules, size guard, input glob, report paths,
 and hashed probe metadata.
+Use `--manifest` to append a compact JSONL run history record; with no path
+argument it writes to `work/dogfood-pdfs/inventory/dogfood-manifest.jsonl`.
 
 ## Validation
 
