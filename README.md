@@ -28,6 +28,7 @@ python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
 pdf-glyph-replace --version
+pdf-fixture-qdf --version
 pdf-glyph-replace input.pdf 3807 8304 -o output.pdf
 ```
 
@@ -72,14 +73,48 @@ The report records match counts, font resources, stream object ids, text object
 ids, alignment policy, and validation hints. It does not include full decoded
 text or literal search/replacement strings by default.
 
+## Synthetic Fixtures
+
+Use `pdf-fixture-qdf` to create public, non-sensitive QDF fixtures for issues,
+tests, and repros:
+
+```bash
+pdf-fixture-qdf 3807 -o work/fixture.qdf
+pdf-fixture-qdf '$37.34' --one-glyph-per-line --x 653.375 --y 1370 -o work/amount.qdf
+```
+
+The fixture helper emits a minimal QDF-like byte stream with a synthetic Type0
+font, `/ToUnicode` CMap, and hexadecimal text operands. It is designed for
+testing `pdf_glyph_replace` parsing and replacement logic without sharing
+private PDFs.
+
+The same helper is available from Python:
+
+```python
+import pdf_fixture
+
+qdf = pdf_fixture.synthetic_qdf("3807")
+amount_qdf = pdf_fixture.synthetic_qdf(
+    "$37.34",
+    one_glyph_per_line=True,
+    x="653.375",
+    y="1370",
+)
+```
+
+The synthetic font intentionally contains only a small glyph set used by the
+tests and examples. If a repro needs more characters, extend the synthetic map
+in code rather than attaching a real private document.
+
 ## Validation
 
 Run the source-level tests:
 
 ```bash
-python3 -m py_compile pdf_glyph_replace.py
+python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py
 python3 -m unittest discover -s tests -v
 pdf-glyph-replace --version
+pdf-fixture-qdf --version
 ```
 
 Run local PDF smoke tests when fixture PDFs are available:

@@ -16,6 +16,13 @@ Use one of these instead:
 - A tiny fixture built from made-up text, coordinates, and glyph mappings.
 - Non-sensitive JSON from `--dry-run --json` or `--report`.
 
+The `pdf-fixture-qdf` command can generate minimal public fixtures:
+
+```bash
+pdf-fixture-qdf 3807 -o work/fixture.qdf
+pdf-fixture-qdf '$37.34' --one-glyph-per-line --x 653.375 --y 1370 -o work/amount.qdf
+```
+
 Keep scratch artifacts under ignored paths such as `work/` or local `tmp*.pdf`
 files.
 
@@ -49,10 +56,11 @@ through PR checks.
 Before opening a PR, run:
 
 ```bash
-python -m py_compile pdf_glyph_replace.py
+python -m py_compile pdf_glyph_replace.py pdf_fixture.py
 python -m unittest discover -s tests -v
 python -m build
 pdf-glyph-replace --version
+pdf-fixture-qdf --version
 ```
 
 If your local Python installation blocks package installs, use a virtual
@@ -64,12 +72,17 @@ work/dev-venv/bin/python -m pip install --upgrade pip build
 work/dev-venv/bin/python -m build
 work/dev-venv/bin/python -m pip install -e .
 work/dev-venv/bin/pdf-glyph-replace --version
+work/dev-venv/bin/pdf-fixture-qdf --version
 ```
 
 ## Tests
 
 Prefer synthetic QDF fixtures in unit tests. Tests should be small, deterministic,
 and independent of private PDFs.
+
+Use `pdf_fixture.synthetic_qdf`, `pdf_fixture.text_object`, and
+`pdf_fixture.qdf_document` when adding parser or replacement tests. Extend the
+synthetic glyph map when a test needs new public characters.
 
 Add or update tests when a change affects:
 

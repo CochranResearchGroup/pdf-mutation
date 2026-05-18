@@ -1,9 +1,10 @@
 import unittest
 
+import pdf_fixture as f
 import pdf_glyph_replace as p
 
 
-CMAP_STREAM = b"""/CIDInit /ProcSet findresource begin
+CMAP_RANGE_STREAM = b"""/CIDInit /ProcSet findresource begin
 12 dict begin
 begincmap
 /CIDSystemInfo
@@ -44,92 +45,9 @@ end
 """
 
 
-def qdf_with_text(text_body: bytes) -> bytes:
-    return b"""1 0 obj
-<<
-  /Resources <<
-    /Font <<
-      /F4 25 0 R
-    >>
-  >>
->>
-endobj
-25 0 obj
-<<
-  /BaseFont /AAAAAA+Fixture
-  /DescendantFonts [48 0 R]
-  /Encoding /Identity-H
-  /Subtype /Type0
-  /ToUnicode 49 0 R
-  /Type /Font
->>
-endobj
-49 0 obj
-<<
-  /Length 50 0 R
->>
-stream
-""" + CMAP_STREAM + b"""endstream
-endobj
-51 0 obj
-<<
-  /Length 52 0 R
->>
-stream
-BT
-""" + text_body + b"""
-ET
-endstream
-endobj
-"""
-
-
-def qdf_with_two_text_objects(first_body: bytes, second_body: bytes) -> bytes:
-    return b"""1 0 obj
-<<
-  /Resources <<
-    /Font <<
-      /F4 25 0 R
-    >>
-  >>
->>
-endobj
-25 0 obj
-<<
-  /BaseFont /AAAAAA+Fixture
-  /DescendantFonts [48 0 R]
-  /Encoding /Identity-H
-  /Subtype /Type0
-  /ToUnicode 49 0 R
-  /Type /Font
->>
-endobj
-49 0 obj
-<<
-  /Length 50 0 R
->>
-stream
-""" + CMAP_STREAM + b"""endstream
-endobj
-51 0 obj
-<<
-  /Length 52 0 R
->>
-stream
-BT
-""" + first_body + b"""
-ET
-BT
-""" + second_body + b"""
-ET
-endstream
-endobj
-"""
-
-
 class PdfGlyphReplaceTests(unittest.TestCase):
     def test_parse_cmap_ignores_codespace_range_and_decodes_ranges(self):
-        cmap = p.parse_cmap(CMAP_STREAM)
+        cmap = p.parse_cmap(CMAP_RANGE_STREAM)
 
         self.assertEqual(cmap["0003"], " ")
         self.assertEqual(cmap["0004"], ".")
@@ -139,14 +57,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertNotIn("0000", cmap)
 
     def test_exact_replacement_rewrites_only_matching_cids(self):
-        qdf = qdf_with_text(
-            b"""/F4 16 Tf
-1 0 0 -1 100 10 Tm
-<002D> Tj
-9.6 0 Td <0032> Tj
-9.6 0 Td <002A> Tj
-9.6 0 Td <0031> Tj"""
-        )
+        qdf = f.synthetic_qdf("3807", one_glyph_per_line=True)
 
         edited, count = p.replace_qdf(qdf, "3807", "8304", align="exact")
 
@@ -156,11 +67,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertNotIn(b"9.6 0 Td <0031> Tj", edited)
 
     def test_exact_replacement_handles_multiple_cids_in_one_tj_operand(self):
-        qdf = qdf_with_text(
-            b"""/F4 16 Tf
-1 0 0 -1 100 10 Tm
-<002D0032002A0031> Tj"""
-        )
+        qdf = f.synthetic_qdf("3807")
 
         edited, count = p.replace_qdf(qdf, "3807", "8304", align="exact")
 
@@ -168,7 +75,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertIn(b"<0032002D002A002E> Tj", edited)
 
     def test_exact_replacement_handles_simple_tj_array(self):
-        qdf = qdf_with_text(
+        qdf = f.qdf_document(
             b"""/F4 16 Tf
 1 0 0 -1 100 10 Tm
 [<002D0032> 25 <002A0031>] TJ"""
@@ -180,16 +87,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertIn(b"[<0032002D> 25 <002A002E>] TJ", edited)
 
     def test_right_aligned_replacement_shifts_text_matrix_and_inserts_glyph(self):
-        qdf = qdf_with_text(
-            b"""/F4 16 Tf
-1 0 0 -1 653.375 1370 Tm
-<0093> Tj
-9.6 0 Td <002D> Tj
-9.6 0 Td <0031> Tj
-9.6 0 Td <0004> Tj
-3.6 0 Td <002D> Tj
-9.6 0 Td <002E> Tj"""
-        )
+        qdf = f.synthetic_qdf("$37.34", one_glyph_per_line=True, x="653.375", y="1370")
 
         edited, count = p.replace_qdf(qdf, "37.34", "138.46", align="right")
 
@@ -201,16 +99,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertIn(b"9.6 0 Td <0030> Tj", edited)
 
     def test_left_aligned_replacement_preserves_text_matrix_and_inserts_glyph(self):
-        qdf = qdf_with_text(
-            b"""/F4 16 Tf
-1 0 0 -1 653.375 1370 Tm
-<0093> Tj
-9.6 0 Td <002D> Tj
-9.6 0 Td <0031> Tj
-9.6 0 Td <0004> Tj
-3.6 0 Td <002D> Tj
-9.6 0 Td <002E> Tj"""
-        )
+        qdf = f.synthetic_qdf("$37.34", one_glyph_per_line=True, x="653.375", y="1370")
 
         edited, count = p.replace_qdf(qdf, "37.34", "138.46", align="left")
 
@@ -222,14 +111,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertIn(b"9.6 0 Td <0030> Tj", edited)
 
     def test_analyze_qdf_reports_feasibility(self):
-        qdf = qdf_with_text(
-            b"""/F4 16 Tf
-1 0 0 -1 100 10 Tm
-<002D> Tj
-9.6 0 Td <0032> Tj
-9.6 0 Td <002A> Tj
-9.6 0 Td <0031> Tj"""
-        )
+        qdf = f.synthetic_qdf("3807", one_glyph_per_line=True)
 
         reports, decode_maps = p.analyze_qdf(qdf, "3807", "8304", align="exact")
 
@@ -242,11 +124,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(reports[0].estimated_x_shift, "0")
 
     def test_report_payload_omits_literal_text_and_keeps_locations(self):
-        qdf = qdf_with_text(
-            b"""/F4 16 Tf
-1 0 0 -1 100 10 Tm
-<002D0032002A0031> Tj"""
-        )
+        qdf = f.synthetic_qdf("3807")
         reports, decode_maps = p.analyze_qdf(qdf, "3807", "8304", align="exact")
 
         payload = p.report_payload(
@@ -267,16 +145,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(payload["matches"][0]["stream_object"], 51)
 
     def test_analyze_qdf_reports_left_alignment_contract(self):
-        qdf = qdf_with_text(
-            b"""/F4 16 Tf
-1 0 0 -1 653.375 1370 Tm
-<0093> Tj
-9.6 0 Td <002D> Tj
-9.6 0 Td <0031> Tj
-9.6 0 Td <0004> Tj
-3.6 0 Td <002D> Tj
-9.6 0 Td <002E> Tj"""
-        )
+        qdf = f.synthetic_qdf("$37.34", one_glyph_per_line=True, x="653.375", y="1370")
 
         reports, _ = p.analyze_qdf(qdf, "37.34", "138.46", align="left")
 
@@ -286,16 +155,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(reports[0].estimated_x_shift, "0")
 
     def test_analyze_qdf_reports_right_alignment_shift(self):
-        qdf = qdf_with_text(
-            b"""/F4 16 Tf
-1 0 0 -1 653.375 1370 Tm
-<0093> Tj
-9.6 0 Td <002D> Tj
-9.6 0 Td <0031> Tj
-9.6 0 Td <0004> Tj
-3.6 0 Td <002D> Tj
-9.6 0 Td <002E> Tj"""
-        )
+        qdf = f.synthetic_qdf("$37.34", one_glyph_per_line=True, x="653.375", y="1370")
 
         reports, _ = p.analyze_qdf(qdf, "37.34", "138.46", align="right")
 
@@ -305,13 +165,9 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(reports[0].estimated_x_shift, "-9.6")
 
     def test_analyze_qdf_reports_split_match_as_infeasible(self):
-        qdf = qdf_with_two_text_objects(
-            b"""/F4 16 Tf
-1 0 0 -1 100 10 Tm
-<002D0032> Tj""",
-            b"""/F4 16 Tf
-1 0 0 -1 140 10 Tm
-<002A0031> Tj""",
+        qdf = f.qdf_document(
+            f.text_object("38", x="100", y="10"),
+            f.text_object("07", x="140", y="10"),
         )
 
         reports, _ = p.analyze_qdf(qdf, "3807", "8304", align="exact")
@@ -319,6 +175,32 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(len(reports), 1)
         self.assertFalse(reports[0].feasible)
         self.assertIn("split", reports[0].reason)
+
+
+class PdfFixtureTests(unittest.TestCase):
+    def test_synthetic_qdf_decodes_through_replacement_analysis(self):
+        qdf = f.synthetic_qdf("3807")
+
+        reports, decode_maps = p.analyze_qdf(qdf, "3807", "8304", align="exact")
+
+        self.assertEqual(sorted(decode_maps), ["F4"])
+        self.assertEqual(len(reports), 1)
+        self.assertTrue(reports[0].feasible)
+
+    def test_fixture_cli_writes_qdf(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            output = p.Path(tmp) / "fixture.qdf"
+
+            status = f.main(["3807", "-o", str(output)])
+
+            self.assertEqual(status, 0)
+            qdf = output.read_bytes()
+            self.assertIn(b"/BaseFont /AAAAAA+SyntheticFixture", qdf)
+            self.assertIn(b"<002D0032002A0031> Tj", qdf)
+
+    def test_fixture_rejects_missing_characters(self):
+        with self.assertRaises(ValueError):
+            f.synthetic_qdf("missing Z")
 
 
 if __name__ == "__main__":
