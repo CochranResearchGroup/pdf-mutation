@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest a bounded capability or workflow improvement.
+title: "Feature: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep requests concrete. Do not include private PDFs or sensitive document content.
+        If the feature depends on document structure, describe it with synthetic examples or reduced QDF snippets.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow or limitation should this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should the tool do?
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Synthetic examples
+      description: Provide non-sensitive commands, snippets, or fixture ideas.
+    validations:
+      required: false
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Scope boundaries
+      options:
+        - label: This request does not require private PDF samples.
+          required: true
+        - label: This request does not require synthesizing fonts, OCR, page redraw, or arbitrary document reflow unless explicitly stated as a future direction.
+          required: false
