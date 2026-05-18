@@ -26,6 +26,7 @@ needs to answer a narrower question:
 
 ```bash
 pdf-dogfood-summary --latest-by-policy
+pdf-dogfood-summary --health
 pdf-dogfood-summary --fail-only --policy readiness
 pdf-dogfood-summary --exit-code 2 --json
 ```

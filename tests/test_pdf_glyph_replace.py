@@ -744,6 +744,51 @@ class PdfDogfoodSummaryTests(unittest.TestCase):
         self.assertEqual(payload[0]["policy"]["policy"], "routine")
         self.assertEqual(payload[0]["policy"]["json_path"], "work/dogfood-pdfs/inventory/routine-latest.json")
 
+    def test_health_status_reports_failed_gate_record(self):
+        records = ds.load_manifest(self.FIXTURE_MANIFEST)
+
+        status, line = ds.health_status(ds.health_record(records))
+
+        self.assertEqual(status, 2)
+        self.assertIn("fail", line)
+        self.assertIn("policy=readiness", line)
+        self.assertIn("fail_matches=2", line)
+        self.assertIn("probe-no-match,unsupported", line)
+
+    def test_health_status_reports_passed_gate_record(self):
+        record = {
+            "exit_code": 0,
+            "fail_on_match_count": 0,
+            "fail_on_rules": [],
+            "policy": {
+                "policy": "complete",
+                "selected_policy": "complete",
+                "json_path": "work/dogfood-pdfs/inventory/complete.json",
+            },
+        }
+
+        status, line = ds.health_status(record)
+
+        self.assertEqual(status, 0)
+        self.assertIn("ok", line)
+        self.assertIn("policy=complete", line)
+        self.assertIn("exit=0", line)
+
+    def test_health_status_reports_missing_gate_record(self):
+        status, line = ds.health_status(None)
+
+        self.assertEqual(status, 2)
+        self.assertIn("missing", line)
+
+    def test_main_health_returns_nonzero_for_failed_fixture_gate(self):
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            status = ds.main([str(self.FIXTURE_MANIFEST), "--health"])
+
+        self.assertEqual(status, 2)
+        self.assertIn("policy=readiness", stdout.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
