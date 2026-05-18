@@ -202,6 +202,11 @@ pdf-dogfood-summary --fail-only --policy readiness
 pdf-dogfood-summary --exit-code 2 --json
 ```
 
+For an Actions-side check, run the `CI` workflow manually from GitHub Actions
+and use its `dogfood_manifest` input. The manual `Dogfood manifest health` job
+defaults to `tests/fixtures/dogfood-manifest.jsonl`, reports the `--health`
+exit status as a notice, and does not require private PDFs in the repository.
+
 ## Validation
 
 Run the source-level tests:
