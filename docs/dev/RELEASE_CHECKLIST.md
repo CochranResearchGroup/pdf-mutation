@@ -14,7 +14,7 @@ Use this checklist before cutting a package release.
 Run source-level checks:
 
 ```bash
-python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_dogfood.py
+python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_dogfood.py pdf_dogfood_summary.py
 python3 -m unittest discover -s tests -v
 ```
 
@@ -27,6 +27,7 @@ work/release-venv/bin/pdf-glyph-replace --version
 work/release-venv/bin/pdf-fixture-qdf --version
 work/release-venv/bin/pdf-inventory --version
 work/release-venv/bin/pdf-dogfood --version
+work/release-venv/bin/pdf-dogfood-summary --version
 work/release-venv/bin/python -m pip wheel . -w work/dist
 ```
 

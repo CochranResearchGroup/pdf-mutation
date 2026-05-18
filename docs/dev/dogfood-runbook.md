@@ -20,6 +20,8 @@ input glob, report paths, and hashed probe metadata.
 Add `--manifest` to append one compact JSONL run history record. With no path
 argument, the manifest is written to
 `work/dogfood-pdfs/inventory/dogfood-manifest.jsonl`.
+Use `pdf-dogfood-summary --limit 10` to inspect recent manifest records as a
+TSV table without loading full inventory reports.
 
 ## Corpus Location
 

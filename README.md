@@ -31,6 +31,7 @@ pdf-glyph-replace --version
 pdf-fixture-qdf --version
 pdf-inventory --version
 pdf-dogfood --version
+pdf-dogfood-summary --version
 pdf-glyph-replace input.pdf 3807 8304 -o output.pdf
 ```
 
@@ -191,6 +192,11 @@ selected policy, effective fail-on rules, size guard, input glob, report paths,
 and hashed probe metadata.
 Use `--manifest` to append a compact JSONL run history record; with no path
 argument it writes to `work/dogfood-pdfs/inventory/dogfood-manifest.jsonl`.
+Use `pdf-dogfood-summary` to print recent manifest records as a TSV table:
+
+```bash
+pdf-dogfood-summary --limit 10
+```
 
 ## Validation
 
@@ -203,6 +209,7 @@ pdf-glyph-replace --version
 pdf-fixture-qdf --version
 pdf-inventory --version
 pdf-dogfood --version
+pdf-dogfood-summary --version
 ```
 
 Run local PDF smoke tests when fixture PDFs are available:
@@ -236,7 +243,7 @@ the full release checklist.
 Release gate:
 
 ```bash
-python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_dogfood.py
+python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_dogfood.py pdf_dogfood_summary.py
 python3 -m unittest discover -s tests -v
 python3 -m venv work/release-venv
 work/release-venv/bin/python -m pip install -e .
@@ -244,6 +251,7 @@ work/release-venv/bin/pdf-glyph-replace --version
 work/release-venv/bin/pdf-fixture-qdf --version
 work/release-venv/bin/pdf-inventory --version
 work/release-venv/bin/pdf-dogfood --version
+work/release-venv/bin/pdf-dogfood-summary --version
 work/release-venv/bin/python -m pip wheel . -w work/dist
 ```
 
