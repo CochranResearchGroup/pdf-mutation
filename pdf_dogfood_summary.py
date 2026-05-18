@@ -54,6 +54,46 @@ def format_rules(rules: Any) -> str:
     return ",".join(str(rule) for rule in rules)
 
 
+def int_value(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def matches_filters(
+    record: dict[str, Any],
+    *,
+    policies: list[str],
+    fail_only: bool,
+    exit_codes: list[int],
+) -> bool:
+    if policies:
+        policy = str(record_value(record, ("policy", "policy")))
+        selected_policy = str(record_value(record, ("policy", "selected_policy")))
+        if policy not in policies and selected_policy not in policies:
+            return False
+    if fail_only and int_value(record.get("fail_on_match_count")) <= 0:
+        return False
+    if exit_codes and int_value(record.get("exit_code"), default=-1) not in exit_codes:
+        return False
+    return True
+
+
+def filter_records(
+    records: list[dict[str, Any]],
+    *,
+    policies: list[str],
+    fail_only: bool,
+    exit_codes: list[int],
+) -> list[dict[str, Any]]:
+    return [
+        record
+        for record in records
+        if matches_filters(record, policies=policies, fail_only=fail_only, exit_codes=exit_codes)
+    ]
+
+
 def rows_for_records(records: list[dict[str, Any]]) -> list[list[str]]:
     rows: list[list[str]] = []
     for record in records:
@@ -113,6 +153,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="write selected manifest records as JSON instead of a TSV table",
     )
+    parser.add_argument(
+        "--policy",
+        action="append",
+        default=[],
+        help="show only records whose effective or selected policy matches this value; repeatable",
+    )
+    parser.add_argument(
+        "--fail-only",
+        action="store_true",
+        help="show only records with one or more fail-on matches",
+    )
+    parser.add_argument(
+        "--exit-code",
+        action="append",
+        type=int,
+        default=[],
+        help="show only records with this process exit code; repeatable",
+    )
     return parser.parse_args(argv)
 
 
@@ -122,7 +180,12 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--limit must be non-negative")
     if not args.manifest.exists():
         raise SystemExit(f"manifest does not exist: {args.manifest}")
-    records = load_manifest(args.manifest)
+    records = filter_records(
+        load_manifest(args.manifest),
+        policies=args.policy,
+        fail_only=args.fail_only,
+        exit_codes=args.exit_code,
+    )
     if args.limit:
         records = records[-args.limit :]
     if args.json:

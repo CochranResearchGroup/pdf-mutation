@@ -21,7 +21,13 @@ Add `--manifest` to append one compact JSONL run history record. With no path
 argument, the manifest is written to
 `work/dogfood-pdfs/inventory/dogfood-manifest.jsonl`.
 Use `pdf-dogfood-summary --limit 10` to inspect recent manifest records as a
-TSV table without loading full inventory reports.
+TSV table without loading full inventory reports. Add filters when the history
+needs to answer a narrower question:
+
+```bash
+pdf-dogfood-summary --fail-only --policy readiness
+pdf-dogfood-summary --exit-code 2 --json
+```
 
 ## Corpus Location
 
