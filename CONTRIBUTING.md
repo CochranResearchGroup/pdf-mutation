@@ -94,6 +94,7 @@ Add or update tests when a change affects:
 - Report JSON shape.
 - CLI behavior.
 - PDF inventory classification.
+- PDF inventory probe summaries.
 
 ## Release Changes
 
