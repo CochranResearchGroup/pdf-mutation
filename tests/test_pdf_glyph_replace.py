@@ -638,6 +638,20 @@ class PdfDogfoodSummaryTests(unittest.TestCase):
 
             self.assertEqual(records, [{"a": 1}, {"b": 2}])
 
+    def test_filter_records_combines_policy_fail_and_exit_filters(self):
+        records = ds.load_manifest(self.FIXTURE_MANIFEST)
+
+        filtered = ds.filter_records(
+            records,
+            policies=["readiness"],
+            fail_only=True,
+            exit_codes=[2],
+        )
+
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["policy"]["policy"], "readiness")
+        self.assertEqual(filtered[0]["exit_code"], 2)
+
     def test_main_prints_fixture_manifest_table(self):
         stdout = io.StringIO()
 
@@ -670,6 +684,30 @@ class PdfDogfoodSummaryTests(unittest.TestCase):
         self.assertEqual(len(payload), 1)
         self.assertEqual(payload[0]["policy"]["policy"], "readiness")
         self.assertEqual(payload[0]["fail_on_rules"], ["probe-no-match", "unsupported"])
+
+    def test_main_filters_fixture_manifest_table(self):
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            status = ds.main([str(self.FIXTURE_MANIFEST), "--fail-only", "--policy", "readiness"])
+
+        lines = stdout.getvalue().splitlines()
+        self.assertEqual(status, 0)
+        self.assertEqual(len(lines), 2)
+        self.assertIn("readiness", lines[1])
+        self.assertNotIn("routine", lines[1])
+
+    def test_main_filters_fixture_manifest_json_by_exit_code(self):
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            status = ds.main([str(self.FIXTURE_MANIFEST), "--exit-code", "0", "--json"])
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(status, 0)
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["policy"]["policy"], "routine")
+        self.assertEqual(payload[0]["exit_code"], 0)
 
 
 if __name__ == "__main__":
