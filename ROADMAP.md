@@ -146,7 +146,7 @@ Completion Notes:
 - Added `pyproject.toml` with package metadata and the
   `pdf-glyph-replace` console script.
 - Added `pdf_glyph_replace.__version__` and `--version`; current version is
-  `0.1.0`.
+  `0.1.1`.
 - Documented venv-based editable install, release gate, wheel build, external
   tool requirements, and semantic versioning.
 - Added ignore rules for package metadata and build outputs.

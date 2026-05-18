@@ -27,7 +27,7 @@ from decimal import Decimal
 from pathlib import Path
 
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 OBJ_RE = re.compile(rb"(?m)^(\d+) 0 obj\n(.*?)\nendobj", re.S)
 STREAM_RE = re.compile(rb"(stream\n)(.*?)(\nendstream)", re.S)

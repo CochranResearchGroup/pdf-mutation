@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.1 | Release Automation Maintenance
+
+Maintenance release that includes the public GitHub release automation added
+after `v0.1.0`.
+
+### Changed
+
+- Build both wheel and source distribution in CI.
+- Upload build distributions as workflow artifacts for every CI run.
+- Upload release assets automatically for future `v*` tag pushes.
+- Use current GitHub Actions runtimes for checkout, Python setup, and artifact
+  upload actions.
+
 ## v0.1.0 | Initial Release
 
 Initial release of `pdf-mutation`, a deterministic glyph-preserving PDF text

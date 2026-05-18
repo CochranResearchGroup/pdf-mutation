@@ -49,7 +49,7 @@ rg '138\.46' work/release.amount.bbox.html
 - Tag the release from the validated commit:
 
 ```bash
-git tag -a v0.1.0 -m "v0.1.0"
+git tag -a vX.Y.Z -m "vX.Y.Z"
 ```
 
 Do not tag until validation has passed on the exact commit being tagged.
