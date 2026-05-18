@@ -17,18 +17,54 @@ __version__ = glyph.__version__
 DEFAULT_CORPUS = Path("work/dogfood-pdfs/sample-*.pdf")
 DEFAULT_OUTPUT_DIR = Path("work/dogfood-pdfs/inventory")
 DEFAULT_MAX_INPUT_BYTES = 50_000_000
-DEFAULT_FAIL_ON = (
-    "error",
-    "qpdf-check-failed",
-    "qdf-conversion-failed",
-    "probe-feasible",
+POLICY_FAIL_ON = {
+    "complete": (
+        "error",
+        "qpdf-check-failed",
+        "qdf-conversion-failed",
+        "skipped",
+    ),
+    "readiness": (
+        "error",
+        "unsupported",
+        "skipped",
+        "probe-unsupported",
+        "probe-no-match",
+        "probe-infeasible",
+    ),
+    "routine": (
+        "error",
+        "qpdf-check-failed",
+        "qdf-conversion-failed",
+        "probe-feasible",
+    ),
+}
+DEFAULT_POLICY = "routine"
+POLICY_HELP = "; ".join(
+    f"{name}: {', '.join(rules)}" for name, rules in sorted(POLICY_FAIL_ON.items())
 )
+
+
+def selected_fail_on(args: argparse.Namespace) -> list[str]:
+    """Return the effective fail-on rules for the selected policy flags."""
+    if args.no_fail_on:
+        return []
+    if args.fail_on is not None:
+        return list(args.fail_on)
+    return list(POLICY_FAIL_ON[args.policy])
+
+
+def output_name(args: argparse.Namespace) -> str:
+    """Return the report filename stem for this run."""
+    if args.name:
+        return args.name
+    return "dogfood" if args.policy == DEFAULT_POLICY else f"dogfood-{args.policy}"
 
 
 def build_inventory_argv(args: argparse.Namespace) -> list[str]:
     """Build the pdf-inventory argv for the selected dogfood policy."""
     output_dir = args.output_dir
-    stem = args.name
+    stem = output_name(args)
     inventory_args = [str(pdf) for pdf in args.pdfs]
     inventory_args.append("--summary")
     inventory_args.extend(["--max-input-bytes", str(args.max_input_bytes)])
@@ -37,9 +73,10 @@ def build_inventory_argv(args: argparse.Namespace) -> list[str]:
     if args.probe:
         inventory_args.extend(["--probe", args.probe[0], args.probe[1]])
         inventory_args.extend(["--align", args.align])
-    if args.fail_on:
+    fail_on = selected_fail_on(args)
+    if fail_on:
         inventory_args.append("--fail-on")
-        inventory_args.extend(args.fail_on)
+        inventory_args.extend(fail_on)
     return inventory_args
 
 
@@ -54,6 +91,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         type=Path,
         default=[DEFAULT_CORPUS],
         help=f"PDF glob(s) to inventory; default: {DEFAULT_CORPUS}",
+    )
+    parser.add_argument(
+        "--policy",
+        choices=tuple(sorted(POLICY_FAIL_ON)),
+        default=DEFAULT_POLICY,
+        help=f"named fail-on policy; default: {DEFAULT_POLICY}. Policies: {POLICY_HELP}",
     )
     parser.add_argument(
         "--probe",
@@ -81,16 +124,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--name",
-        default="dogfood",
-        help="output report filename stem; default: dogfood",
+        help="output report filename stem; default: dogfood or dogfood-<policy>",
     )
     parser.add_argument(
         "--fail-on",
         nargs="+",
         choices=pdf_inventory.FAIL_ON_CHOICES,
-        default=list(DEFAULT_FAIL_ON),
+        default=None,
         metavar="RULE",
-        help="inventory rules that make the command exit 2",
+        help="override --policy with explicit inventory rules that make the command exit 2",
     )
     parser.add_argument(
         "--no-fail-on",
@@ -115,8 +157,6 @@ def expand_pdf_args(pdfs: list[Path]) -> list[Path]:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     args.pdfs = expand_pdf_args(args.pdfs)
-    if args.no_fail_on:
-        args.fail_on = []
     return pdf_inventory.main(build_inventory_argv(args))
 
 

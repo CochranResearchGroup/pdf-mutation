@@ -460,13 +460,47 @@ class PdfDogfoodTests(unittest.TestCase):
 
     def test_build_inventory_argv_can_run_report_only(self):
         args = d.parse_args(["--no-fail-on", "--name", "baseline"])
-        if args.no_fail_on:
-            args.fail_on = []
 
         argv = d.build_inventory_argv(args)
 
         self.assertNotIn("--fail-on", argv)
         self.assertIn("work/dogfood-pdfs/inventory/baseline.json", argv)
+
+    def test_build_inventory_argv_uses_named_policy(self):
+        args = d.parse_args(["--policy", "complete"])
+
+        argv = d.build_inventory_argv(args)
+
+        self.assertEqual(
+            argv[argv.index("--fail-on") + 1 :],
+            ["error", "qpdf-check-failed", "qdf-conversion-failed", "skipped"],
+        )
+        self.assertIn("work/dogfood-pdfs/inventory/dogfood-complete.json", argv)
+
+    def test_build_inventory_argv_explicit_fail_on_overrides_policy(self):
+        args = d.parse_args(["--policy", "complete", "--fail-on", "error"])
+
+        argv = d.build_inventory_argv(args)
+
+        self.assertEqual(argv[argv.index("--fail-on") + 1 :], ["error"])
+
+    def test_build_inventory_argv_uses_readiness_policy(self):
+        args = d.parse_args(["--policy", "readiness", "--probe", "SEARCH", "REPLACEMENT"])
+
+        argv = d.build_inventory_argv(args)
+
+        self.assertEqual(
+            argv[argv.index("--fail-on") + 1 :],
+            [
+                "error",
+                "unsupported",
+                "skipped",
+                "probe-unsupported",
+                "probe-no-match",
+                "probe-infeasible",
+            ],
+        )
+        self.assertIn("work/dogfood-pdfs/inventory/dogfood-readiness.json", argv)
 
     def test_expand_pdf_args_expands_globs(self):
         with p.tempfile.TemporaryDirectory() as tmp:

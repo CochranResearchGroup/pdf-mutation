@@ -12,6 +12,8 @@ pdf-dogfood --probe 3807 8304
 By default, this expands `work/dogfood-pdfs/sample-*.pdf`, writes JSON and TSV
 reports under `work/dogfood-pdfs/inventory/`, applies `--max-input-bytes
 50000000`, and uses the routine fail-on policy from this runbook.
+Use `--policy complete` or `--policy readiness` to select the other runbook
+gate profiles.
 
 ## Corpus Location
 
@@ -98,6 +100,12 @@ pdf-inventory work/dogfood-pdfs/sample-*.pdf \
 For corpus completeness checks, also fail on skipped rows:
 
 ```bash
+pdf-dogfood --policy complete
+```
+
+Equivalent explicit `pdf-inventory` command:
+
+```bash
 pdf-inventory work/dogfood-pdfs/sample-*.pdf \
   --summary \
   --max-input-bytes 50000000 \
@@ -107,6 +115,12 @@ pdf-inventory work/dogfood-pdfs/sample-*.pdf \
 
 For targeted mutation readiness, fail when the probe does not find a clean
 supported match:
+
+```bash
+pdf-dogfood --policy readiness --probe SEARCH REPLACEMENT
+```
+
+Equivalent explicit `pdf-inventory` command:
 
 ```bash
 pdf-inventory work/dogfood-pdfs/sample-*.pdf \

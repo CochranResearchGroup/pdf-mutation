@@ -183,6 +183,9 @@ By default, `pdf-dogfood` scans `work/dogfood-pdfs/sample-*.pdf`, writes
 `work/dogfood-pdfs/inventory/dogfood.json` and `.tsv`, applies
 `--max-input-bytes 50000000`, and fails on `error`, `qpdf-check-failed`,
 `qdf-conversion-failed`, or `probe-feasible`.
+Use `--policy complete` to fail on skipped files as well, or
+`--policy readiness --probe SEARCH REPLACEMENT` to require a clean supported
+probe match.
 
 ## Validation
 
