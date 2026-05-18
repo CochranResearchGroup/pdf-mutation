@@ -130,12 +130,17 @@ signals in the inventory:
 ```bash
 pdf-inventory work/dogfood-pdfs/sample-*.pdf \
   --probe 3807 8304 \
+  --summary \
   --json work/dogfood-pdfs/inventory/probed.json
 ```
 
 Probe output includes search/replacement lengths, short hashes, match counts,
 feasibility status, and infeasible reasons. It does not include literal probe
 strings or decoded document text.
+
+Use `--summary` to include aggregate counts by inventory status and probe
+status. The JSON output becomes an object with `rows` and `summary`; TSV remains
+row-oriented.
 
 ## Validation
 

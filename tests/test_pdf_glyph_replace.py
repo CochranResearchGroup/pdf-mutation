@@ -262,6 +262,41 @@ endobj
         self.assertEqual(probe["total_matches"], 0)
         self.assertFalse(probe["feasible"])
 
+    def test_build_summary_aggregates_status_and_probe_counts(self):
+        rows = [
+            {
+                "status": "supported",
+                "reason": "decoded Type0 ToUnicode font resources found",
+                "size_bytes": 100,
+                "qpdf_check": True,
+                "qdf_conversion": True,
+                "type0_font_count": 1,
+                "decoded_font_resource_count": 1,
+                "text_object_count": 2,
+                "probe": {"status": "feasible", "total_matches": 1, "feasible": True},
+            },
+            {
+                "status": "unsupported",
+                "reason": "no Type0 fonts with ToUnicode CMaps found",
+                "size_bytes": 50,
+                "qpdf_check": True,
+                "qdf_conversion": True,
+                "type0_font_count": 0,
+                "decoded_font_resource_count": 0,
+                "text_object_count": 1,
+                "probe": {"status": "unsupported", "total_matches": 0, "feasible": False},
+            },
+        ]
+
+        summary = inv.build_summary(rows)
+
+        self.assertEqual(summary["total_pdfs"], 2)
+        self.assertEqual(summary["total_size_bytes"], 150)
+        self.assertEqual(summary["status_counts"], {"supported": 1, "unsupported": 1})
+        self.assertEqual(summary["probe_status_counts"], {"feasible": 1, "unsupported": 1})
+        self.assertEqual(summary["probe_total_matches"], 1)
+        self.assertEqual(summary["probe_feasible_pdfs"], 1)
+
     def test_write_outputs_writes_json_and_tsv(self):
         row = inv.classify_qdf(f.synthetic_qdf("3807"))
         row.update(
@@ -283,8 +318,14 @@ endobj
             json_path = p.Path(tmp) / "inventory.json"
             tsv_path = p.Path(tmp) / "inventory.tsv"
 
-            inv.write_outputs([row], json_path=json_path, tsv_path=tsv_path)
+            inv.write_outputs(
+                [row],
+                json_path=json_path,
+                tsv_path=tsv_path,
+                summary=inv.build_summary([row]),
+            )
 
+            self.assertIn('"summary"', json_path.read_text())
             self.assertIn('"status": "supported"', json_path.read_text())
             self.assertIn("sample.pdf", tsv_path.read_text())
             self.assertIn("probe_status", tsv_path.read_text())

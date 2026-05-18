@@ -182,10 +182,63 @@ def inventory_pdf(
     return result
 
 
-def write_outputs(rows: list[dict[str, Any]], *, json_path: Path | None, tsv_path: Path | None) -> None:
+def build_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return aggregate non-sensitive inventory counts."""
+    status_counts: dict[str, int] = {}
+    reason_counts: dict[str, int] = {}
+    probe_status_counts: dict[str, int] = {}
+    total_size = 0
+    total_matches = 0
+    supported_with_text_objects = 0
+    for row in rows:
+        status = str(row.get("status", ""))
+        status_counts[status] = status_counts.get(status, 0) + 1
+        reason = str(row.get("reason", ""))
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        if isinstance(row.get("size_bytes"), int):
+            total_size += int(row["size_bytes"])
+        if row.get("status") == "supported" and int(row.get("text_object_count") or 0) > 0:
+            supported_with_text_objects += 1
+        probe = row.get("probe")
+        if isinstance(probe, dict):
+            probe_status = str(probe.get("status", ""))
+            probe_status_counts[probe_status] = probe_status_counts.get(probe_status, 0) + 1
+            total_matches += int(probe.get("total_matches") or 0)
+
+    summary: dict[str, Any] = {
+        "total_pdfs": len(rows),
+        "total_size_bytes": total_size,
+        "status_counts": dict(sorted(status_counts.items())),
+        "reason_counts": dict(sorted(reason_counts.items())),
+        "qpdf_check_failed": sum(1 for row in rows if row.get("qpdf_check") is False),
+        "qdf_conversion_failed": sum(1 for row in rows if row.get("qdf_conversion") is False),
+        "supported_with_text_objects": supported_with_text_objects,
+        "total_type0_fonts": sum(int(row.get("type0_font_count") or 0) for row in rows),
+        "total_decoded_font_resources": sum(
+            int(row.get("decoded_font_resource_count") or 0) for row in rows
+        ),
+        "total_text_objects": sum(int(row.get("text_object_count") or 0) for row in rows),
+    }
+    if probe_status_counts:
+        summary["probe_status_counts"] = dict(sorted(probe_status_counts.items()))
+        summary["probe_total_matches"] = total_matches
+        summary["probe_feasible_pdfs"] = sum(
+            1 for row in rows if isinstance(row.get("probe"), dict) and row["probe"].get("feasible")
+        )
+    return summary
+
+
+def write_outputs(
+    rows: list[dict[str, Any]],
+    *,
+    json_path: Path | None,
+    tsv_path: Path | None,
+    summary: dict[str, Any] | None = None,
+) -> None:
     if json_path:
         json_path.parent.mkdir(parents=True, exist_ok=True)
-        json_path.write_text(json.dumps(rows, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        payload: Any = {"rows": rows, "summary": summary} if summary is not None else rows
+        json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if tsv_path:
         tsv_path.parent.mkdir(parents=True, exist_ok=True)
         headers = [
@@ -246,6 +299,21 @@ def print_table(rows: list[dict[str, Any]]) -> None:
         print("\t".join(values))
 
 
+def print_summary(summary: dict[str, Any]) -> None:
+    print("summary")
+    print(f"total_pdfs\t{summary['total_pdfs']}")
+    print(f"total_size_bytes\t{summary['total_size_bytes']}")
+    print(f"status_counts\t{json.dumps(summary['status_counts'], sort_keys=True)}")
+    print(f"reason_counts\t{json.dumps(summary['reason_counts'], sort_keys=True)}")
+    print(f"total_type0_fonts\t{summary['total_type0_fonts']}")
+    print(f"total_decoded_font_resources\t{summary['total_decoded_font_resources']}")
+    print(f"total_text_objects\t{summary['total_text_objects']}")
+    if "probe_status_counts" in summary:
+        print(f"probe_status_counts\t{json.dumps(summary['probe_status_counts'], sort_keys=True)}")
+        print(f"probe_total_matches\t{summary['probe_total_matches']}")
+        print(f"probe_feasible_pdfs\t{summary['probe_feasible_pdfs']}")
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Inventory PDFs for pdf-mutation support without extracting text content."
@@ -267,6 +335,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default="exact",
         help="alignment policy used by --probe for length-changing replacements",
     )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="include aggregate counts by inventory status and probe status",
+    )
     return parser.parse_args(argv)
 
 
@@ -282,9 +355,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         for pdf in args.pdfs
     ]
-    write_outputs(rows, json_path=args.json, tsv_path=args.tsv)
+    summary = build_summary(rows) if args.summary else None
+    write_outputs(rows, json_path=args.json, tsv_path=args.tsv, summary=summary)
     if not args.json:
         print_table(rows)
+        if summary is not None:
+            print_summary(summary)
     return 1 if any(row["status"] == "error" for row in rows) else 0
 
 

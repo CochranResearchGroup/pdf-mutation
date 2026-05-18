@@ -10,7 +10,7 @@
 - [ ] `pdf-glyph-replace --version`
 - [ ] `pdf-fixture-qdf --version`
 - [ ] `pdf-inventory --version`
-- [ ] `pdf-inventory <sample.pdf> --probe <search> <replacement>`
+- [ ] `pdf-inventory <sample.pdf> --probe <search> <replacement> --summary`
 
 ## Privacy
 
