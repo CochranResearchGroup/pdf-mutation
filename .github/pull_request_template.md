@@ -12,6 +12,7 @@
 - [ ] `pdf-inventory --version`
 - [ ] `pdf-inventory <sample.pdf> --probe <search> <replacement> --summary`
 - [ ] `pdf-inventory <sample.pdf> --max-input-bytes <bytes>`
+- [ ] `pdf-inventory <sample.pdf> --fail-on <rule>`
 
 ## Privacy
 

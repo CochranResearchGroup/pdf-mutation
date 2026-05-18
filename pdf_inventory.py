@@ -19,6 +19,20 @@ import pdf_glyph_replace as glyph
 __version__ = "0.1.1"
 
 
+FAIL_ON_CHOICES = (
+    "error",
+    "unsupported",
+    "skipped",
+    "qpdf-check-failed",
+    "qdf-conversion-failed",
+    "probe-unsupported",
+    "probe-no-match",
+    "probe-infeasible",
+    "probe-feasible",
+    "probe-match",
+)
+
+
 def run_command(args: list[str]) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -342,6 +356,75 @@ def print_summary(summary: dict[str, Any]) -> None:
         print(f"probe_feasible_pdfs\t{summary['probe_feasible_pdfs']}")
 
 
+def fail_on_matches(rows: list[dict[str, Any]], fail_on: list[str]) -> list[dict[str, Any]]:
+    """Return row/rule matches for caller-selected inventory gates."""
+    matches: list[dict[str, Any]] = []
+    selected = set(fail_on)
+    for row in rows:
+        row_rules: list[str] = []
+        status = row.get("status")
+        if "error" in selected and status == "error":
+            row_rules.append("error")
+        if "unsupported" in selected and status == "unsupported":
+            row_rules.append("unsupported")
+        if "skipped" in selected and status == "skipped":
+            row_rules.append("skipped")
+        if (
+            "qpdf-check-failed" in selected
+            and row.get("qpdf_check") is False
+            and row.get("reason") == "qpdf --check failed"
+        ):
+            row_rules.append("qpdf-check-failed")
+        if (
+            "qdf-conversion-failed" in selected
+            and row.get("qdf_conversion") is False
+            and row.get("reason") == "qpdf QDF conversion failed"
+        ):
+            row_rules.append("qdf-conversion-failed")
+
+        probe = row.get("probe")
+        if isinstance(probe, dict):
+            probe_status = probe.get("status")
+            if "probe-unsupported" in selected and probe_status == "unsupported":
+                row_rules.append("probe-unsupported")
+            if "probe-no-match" in selected and probe_status == "no_match":
+                row_rules.append("probe-no-match")
+            if "probe-infeasible" in selected and probe_status == "infeasible":
+                row_rules.append("probe-infeasible")
+            if "probe-feasible" in selected and probe_status == "feasible":
+                row_rules.append("probe-feasible")
+            if "probe-match" in selected and int(probe.get("total_matches") or 0) > 0:
+                row_rules.append("probe-match")
+
+        if row_rules:
+            matches.append(
+                {
+                    "input_pdf": row.get("input_pdf", ""),
+                    "status": status,
+                    "probe_status": probe.get("status", "") if isinstance(probe, dict) else "",
+                    "rules": row_rules,
+                }
+            )
+    return matches
+
+
+def print_fail_on_matches(matches: list[dict[str, Any]]) -> None:
+    print("fail_on_matches", file=sys.stderr)
+    print("input_pdf\tstatus\tprobe_status\trules", file=sys.stderr)
+    for match in matches:
+        print(
+            "\t".join(
+                [
+                    str(match.get("input_pdf", "")),
+                    str(match.get("status", "")),
+                    str(match.get("probe_status", "")),
+                    ",".join(str(rule) for rule in match.get("rules", [])),
+                ]
+            ),
+            file=sys.stderr,
+        )
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Inventory PDFs for pdf-mutation support without extracting text content."
@@ -373,6 +456,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         type=int,
         help="skip QDF conversion for PDFs larger than this many bytes",
     )
+    parser.add_argument(
+        "--fail-on",
+        nargs="+",
+        choices=FAIL_ON_CHOICES,
+        default=[],
+        metavar="RULE",
+        help="exit non-zero when any selected inventory rule matches",
+    )
     return parser.parse_args(argv)
 
 
@@ -395,6 +486,10 @@ def main(argv: list[str] | None = None) -> int:
         print_table(rows)
         if summary is not None:
             print_summary(summary)
+    matches = fail_on_matches(rows, args.fail_on)
+    if matches:
+        print_fail_on_matches(matches)
+        return 2
     return 1 if any(row["status"] == "error" for row in rows) else 0
 
 

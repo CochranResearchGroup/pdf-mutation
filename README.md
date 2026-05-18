@@ -155,6 +155,20 @@ Skipped PDFs are reported with `status: "skipped"` and still contribute to the
 summary counts. This avoids expanding large inputs into much larger QDF files
 unless explicitly needed.
 
+Use `--fail-on` to turn inventory reports into deterministic corpus gates:
+
+```bash
+pdf-inventory work/dogfood-pdfs/sample-*.pdf \
+  --probe 3807 8304 \
+  --max-input-bytes 50000000 \
+  --fail-on error qdf-conversion-failed probe-feasible
+```
+
+The command exits 2 when any selected rule matches and prints the matching rows
+to stderr. Available rules are `error`, `unsupported`, `skipped`,
+`qpdf-check-failed`, `qdf-conversion-failed`, `probe-unsupported`,
+`probe-no-match`, `probe-infeasible`, `probe-feasible`, and `probe-match`.
+
 ## Validation
 
 Run the source-level tests:

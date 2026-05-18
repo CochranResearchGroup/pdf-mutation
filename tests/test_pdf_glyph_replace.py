@@ -1,4 +1,7 @@
+import contextlib
+import io
 import unittest
+import unittest.mock
 
 import pdf_fixture as f
 import pdf_glyph_replace as p
@@ -329,6 +332,77 @@ endobj
         )
         self.assertEqual(summary["probe_total_matches"], 1)
         self.assertEqual(summary["probe_feasible_pdfs"], 1)
+
+    def test_fail_on_matches_selected_inventory_and_probe_rules(self):
+        rows = [
+            {
+                "input_pdf": "supported.pdf",
+                "status": "supported",
+                "qpdf_check": True,
+                "qdf_conversion": True,
+                "probe": {"status": "feasible", "total_matches": 1},
+            },
+            {
+                "input_pdf": "unsupported.pdf",
+                "status": "unsupported",
+                "reason": "no Type0 fonts with ToUnicode CMaps found",
+                "qpdf_check": True,
+                "qdf_conversion": True,
+                "probe": {"status": "unsupported", "total_matches": 0},
+            },
+            {
+                "input_pdf": "skipped.pdf",
+                "status": "skipped",
+                "reason": "input size exceeds --max-input-bytes (16)",
+                "qpdf_check": False,
+                "qdf_conversion": False,
+                "probe": {"status": "skipped", "total_matches": 0},
+            },
+            {
+                "input_pdf": "broken.pdf",
+                "status": "error",
+                "reason": "qpdf QDF conversion failed",
+                "qpdf_check": True,
+                "qdf_conversion": False,
+            },
+        ]
+
+        matches = inv.fail_on_matches(
+            rows,
+            ["unsupported", "qdf-conversion-failed", "probe-feasible", "probe-match"],
+        )
+
+        self.assertEqual([match["input_pdf"] for match in matches], [
+            "supported.pdf",
+            "unsupported.pdf",
+            "broken.pdf",
+        ])
+        self.assertEqual(matches[0]["rules"], ["probe-feasible", "probe-match"])
+        self.assertEqual(matches[1]["rules"], ["unsupported"])
+        self.assertEqual(matches[2]["rules"], ["qdf-conversion-failed"])
+
+    def test_main_returns_two_for_fail_on_match(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            pdf = p.Path(tmp) / "large.pdf"
+            pdf.write_bytes(b"%PDF-1.7\n" + (b"0" * 32))
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with (
+                unittest.mock.patch.object(inv.glyph, "require_tool"),
+                contextlib.redirect_stdout(stdout),
+                contextlib.redirect_stderr(stderr),
+            ):
+                status = inv.main([
+                    str(pdf),
+                    "--max-input-bytes",
+                    "16",
+                    "--fail-on",
+                    "skipped",
+                ])
+
+            self.assertEqual(status, 2)
+            self.assertIn("fail_on_matches", stderr.getvalue())
 
     def test_write_outputs_writes_json_and_tsv(self):
         row = inv.classify_qdf(f.synthetic_qdf("3807"))
