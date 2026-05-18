@@ -8,6 +8,7 @@ import glob
 import hashlib
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ __version__ = glyph.__version__
 
 DEFAULT_CORPUS = Path("work/dogfood-pdfs/sample-*.pdf")
 DEFAULT_OUTPUT_DIR = Path("work/dogfood-pdfs/inventory")
+DEFAULT_MANIFEST = DEFAULT_OUTPUT_DIR / "dogfood-manifest.jsonl"
 DEFAULT_MAX_INPUT_BYTES = 50_000_000
 POLICY_FAIL_ON = {
     "complete": (
@@ -139,6 +141,41 @@ def write_outputs(
     pdf_inventory.write_outputs(rows, json_path=None, tsv_path=tsv_path, summary=summary)
 
 
+def manifest_record(
+    *,
+    policy: dict[str, Any],
+    summary: dict[str, Any],
+    matches: list[dict[str, Any]],
+    exit_code: int,
+) -> dict[str, Any]:
+    """Return a compact non-sensitive dogfood run manifest record."""
+    return {
+        "timestamp_unix": int(time.time()),
+        "tool": "pdf-dogfood",
+        "version": __version__,
+        "exit_code": exit_code,
+        "policy": policy,
+        "summary": {
+            "total_pdfs": summary.get("total_pdfs"),
+            "status_counts": summary.get("status_counts", {}),
+            "reason_counts": summary.get("reason_counts", {}),
+            "probe_status_counts": summary.get("probe_status_counts", {}),
+            "probe_total_matches": summary.get("probe_total_matches", 0),
+            "probe_feasible_pdfs": summary.get("probe_feasible_pdfs", 0),
+            "qpdf_check_failed": summary.get("qpdf_check_failed", 0),
+            "qdf_conversion_failed": summary.get("qdf_conversion_failed", 0),
+        },
+        "fail_on_match_count": len(matches),
+        "fail_on_rules": sorted({rule for match in matches for rule in match.get("rules", [])}),
+    }
+
+
+def append_manifest(path: Path, record: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the canonical pdf-mutation dogfood inventory gate."
@@ -186,6 +223,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="output report filename stem; default: dogfood or dogfood-<policy>",
     )
     parser.add_argument(
+        "--manifest",
+        nargs="?",
+        const=DEFAULT_MANIFEST,
+        type=Path,
+        help=f"append a compact JSONL run record; default path when omitted: {DEFAULT_MANIFEST}",
+    )
+    parser.add_argument(
         "--fail-on",
         nargs="+",
         choices=pdf_inventory.FAIL_ON_CHOICES,
@@ -230,18 +274,24 @@ def main(argv: list[str] | None = None) -> int:
     ]
     summary = pdf_inventory.build_summary(rows)
     json_path, tsv_path = report_paths(args)
+    policy = policy_metadata(args)
     write_outputs(
         rows,
         json_path=json_path,
         tsv_path=tsv_path,
         summary=summary,
-        policy=policy_metadata(args),
+        policy=policy,
     )
     matches = pdf_inventory.fail_on_matches(rows, selected_fail_on(args))
+    exit_code = 2 if matches else 1 if any(row["status"] == "error" for row in rows) else 0
+    if args.manifest:
+        append_manifest(
+            args.manifest,
+            manifest_record(policy=policy, summary=summary, matches=matches, exit_code=exit_code),
+        )
     if matches:
         pdf_inventory.print_fail_on_matches(matches)
-        return 2
-    return 1 if any(row["status"] == "error" for row in rows) else 0
+    return exit_code
 
 
 if __name__ == "__main__":
