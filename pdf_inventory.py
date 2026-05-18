@@ -130,6 +130,7 @@ def inventory_pdf(
     keep_qdf_dir: Path | None = None,
     probe: tuple[str, str] | None = None,
     align: str = "exact",
+    max_input_bytes: int | None = None,
 ) -> dict[str, Any]:
     """Classify a PDF without mutating it or extracting text content."""
     started = time.time()
@@ -147,6 +148,32 @@ def inventory_pdf(
         result["reason"] = "input file does not exist"
         result["duration_seconds"] = round(time.time() - started, 3)
         return result
+    if max_input_bytes is not None and result["size_bytes"] is not None:
+        if int(result["size_bytes"]) > max_input_bytes:
+            result.update(
+                {
+                    "status": "skipped",
+                    "reason": f"input size exceeds --max-input-bytes ({max_input_bytes})",
+                    "max_input_bytes": max_input_bytes,
+                    "duration_seconds": round(time.time() - started, 3),
+                }
+            )
+            if probe:
+                result["probe"] = {
+                    "search_length": len(probe[0]),
+                    "replacement_length": len(probe[1]),
+                    "search_sha256_12": hashlib.sha256(probe[0].encode("utf-8")).hexdigest()[:12],
+                    "replacement_sha256_12": hashlib.sha256(
+                        probe[1].encode("utf-8")
+                    ).hexdigest()[:12],
+                    "align": align,
+                    "status": "skipped",
+                    "reason": "inventory skipped before QDF conversion",
+                    "total_matches": 0,
+                    "feasible": False,
+                    "match_count_by_font": [],
+                }
+            return result
 
     check = run_command(["qpdf", "--check", str(path)])
     if check.returncode != 0:
@@ -257,6 +284,7 @@ def write_outputs(
             "probe_status",
             "probe_total_matches",
             "probe_feasible",
+            "max_input_bytes",
             "duration_seconds",
         ]
         with tsv_path.open("w", encoding="utf-8") as handle:
@@ -340,6 +368,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="include aggregate counts by inventory status and probe status",
     )
+    parser.add_argument(
+        "--max-input-bytes",
+        type=int,
+        help="skip QDF conversion for PDFs larger than this many bytes",
+    )
     return parser.parse_args(argv)
 
 
@@ -352,6 +385,7 @@ def main(argv: list[str] | None = None) -> int:
             keep_qdf_dir=args.keep_qdf_dir,
             probe=tuple(args.probe) if args.probe else None,
             align=args.align,
+            max_input_bytes=args.max_input_bytes,
         )
         for pdf in args.pdfs
     ]

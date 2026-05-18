@@ -262,6 +262,25 @@ endobj
         self.assertEqual(probe["total_matches"], 0)
         self.assertFalse(probe["feasible"])
 
+    def test_inventory_pdf_skips_oversized_input_before_qdf_conversion(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            pdf = p.Path(tmp) / "large.pdf"
+            pdf.write_bytes(b"%PDF-1.7\n" + (b"0" * 32))
+
+            row = inv.inventory_pdf(
+                pdf,
+                max_input_bytes=16,
+                probe=("3807", "8304"),
+            )
+
+            self.assertEqual(row["status"], "skipped")
+            self.assertFalse(row["qpdf_check"])
+            self.assertFalse(row["qdf_conversion"])
+            self.assertEqual(row["max_input_bytes"], 16)
+            self.assertEqual(row["probe"]["status"], "skipped")
+            self.assertNotIn("3807", str(row))
+            self.assertNotIn("8304", str(row))
+
     def test_build_summary_aggregates_status_and_probe_counts(self):
         rows = [
             {
@@ -286,14 +305,28 @@ endobj
                 "text_object_count": 1,
                 "probe": {"status": "unsupported", "total_matches": 0, "feasible": False},
             },
+            {
+                "status": "skipped",
+                "reason": "input size exceeds --max-input-bytes (16)",
+                "size_bytes": 200,
+                "qpdf_check": False,
+                "qdf_conversion": False,
+                "type0_font_count": 0,
+                "decoded_font_resource_count": 0,
+                "text_object_count": 0,
+                "probe": {"status": "skipped", "total_matches": 0, "feasible": False},
+            },
         ]
 
         summary = inv.build_summary(rows)
 
-        self.assertEqual(summary["total_pdfs"], 2)
-        self.assertEqual(summary["total_size_bytes"], 150)
-        self.assertEqual(summary["status_counts"], {"supported": 1, "unsupported": 1})
-        self.assertEqual(summary["probe_status_counts"], {"feasible": 1, "unsupported": 1})
+        self.assertEqual(summary["total_pdfs"], 3)
+        self.assertEqual(summary["total_size_bytes"], 350)
+        self.assertEqual(summary["status_counts"], {"skipped": 1, "supported": 1, "unsupported": 1})
+        self.assertEqual(
+            summary["probe_status_counts"],
+            {"feasible": 1, "skipped": 1, "unsupported": 1},
+        )
         self.assertEqual(summary["probe_total_matches"], 1)
         self.assertEqual(summary["probe_feasible_pdfs"], 1)
 
