@@ -4,7 +4,7 @@
 
 ## Validation
 
-- [ ] `python -m py_compile pdf_glyph_replace.py`
+- [ ] `python -m py_compile pdf_glyph_replace.py pdf_fixture.py`
 - [ ] `python -m unittest discover -s tests -v`
 - [ ] `python -m build`
 - [ ] `pdf-glyph-replace --version`
