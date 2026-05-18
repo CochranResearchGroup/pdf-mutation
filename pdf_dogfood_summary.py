@@ -13,6 +13,7 @@ import pdf_dogfood
 
 
 __version__ = pdf_dogfood.__version__
+HEALTH_POLICIES = ["readiness", "complete"]
 
 
 def load_manifest(path: Path) -> list[dict[str, Any]]:
@@ -105,6 +106,34 @@ def latest_by_policy(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [latest[policy] for policy in sorted(latest)]
 
 
+def health_record(records: list[dict[str, Any]], health_policies: list[str] | None = None) -> dict[str, Any] | None:
+    policies = health_policies or HEALTH_POLICIES
+    candidates = filter_records(records, policies=policies, fail_only=False, exit_codes=[])
+    if not candidates:
+        return None
+    return candidates[-1]
+
+
+def health_status(record: dict[str, Any] | None) -> tuple[int, str]:
+    if record is None:
+        return 2, "missing\tno readiness or complete policy records found"
+    policy = str(record_value(record, ("policy", "policy")))
+    selected_policy = str(record_value(record, ("policy", "selected_policy")))
+    exit_code = int_value(record.get("exit_code"), default=2)
+    fail_count = int_value(record.get("fail_on_match_count"))
+    status = "ok" if exit_code == 0 and fail_count == 0 else "fail"
+    fields = [
+        status,
+        f"policy={policy}",
+        f"selected={selected_policy}",
+        f"exit={exit_code}",
+        f"fail_matches={fail_count}",
+        f"fail_rules={format_rules(record.get('fail_on_rules', []))}",
+        f"json_path={record_value(record, ('policy', 'json_path'))}",
+    ]
+    return (0 if status == "ok" else 2), "\t".join(fields)
+
+
 def rows_for_records(records: list[dict[str, Any]]) -> list[list[str]]:
     rows: list[list[str]] = []
     for record in records:
@@ -187,6 +216,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="show only the latest matching manifest record for each policy",
     )
+    parser.add_argument(
+        "--health",
+        action="store_true",
+        help="exit 0 only when the latest readiness or complete policy record passed",
+    )
     return parser.parse_args(argv)
 
 
@@ -202,6 +236,10 @@ def main(argv: list[str] | None = None) -> int:
         fail_only=args.fail_only,
         exit_codes=args.exit_code,
     )
+    if args.health:
+        status, line = health_status(health_record(records))
+        print(line)
+        return status
     if args.latest_by_policy:
         records = latest_by_policy(records)
     elif args.limit:
