@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a reproducible problem with pdf-mutation.
+title: "Bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach private PDFs, statements, receipts, invoices, or other sensitive documents.
+        Use a synthetic PDF, a reduced QDF snippet, or a small generated fixture that preserves the parser shape without exposing private data.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Include exact commands and a synthetic fixture or reduced QDF snippet.
+      placeholder: |
+        python -m pdf_glyph_replace input.pdf "3807" "8304" -o output.pdf --dry-run --json
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include error output, validation output, or non-sensitive report JSON.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output from `pdf-glyph-replace --version`.
+      placeholder: "pdf-glyph-replace 0.1.1"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, OS, qpdf version, and pdftotext/mutool availability if relevant.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I have not attached or pasted private PDFs or sensitive document content.
+          required: true
+        - label: Any example data is synthetic or reduced enough to be safe for a public issue.
+          required: true
