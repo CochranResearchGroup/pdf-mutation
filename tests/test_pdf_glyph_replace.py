@@ -1,5 +1,6 @@
 import contextlib
 import io
+import json
 import unittest
 import unittest.mock
 
@@ -586,6 +587,8 @@ class PdfDogfoodTests(unittest.TestCase):
 
 
 class PdfDogfoodSummaryTests(unittest.TestCase):
+    FIXTURE_MANIFEST = p.Path(__file__).parent / "fixtures" / "dogfood-manifest.jsonl"
+
     def test_rows_for_records_formats_manifest_counts(self):
         records = [
             {
@@ -634,6 +637,39 @@ class PdfDogfoodSummaryTests(unittest.TestCase):
             records = ds.load_manifest(manifest)
 
             self.assertEqual(records, [{"a": 1}, {"b": 2}])
+
+    def test_main_prints_fixture_manifest_table(self):
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            status = ds.main([str(self.FIXTURE_MANIFEST), "--limit", "2"])
+
+        output = stdout.getvalue()
+        lines = output.splitlines()
+        self.assertEqual(status, 0)
+        self.assertEqual(
+            lines[0],
+            "timestamp_unix\texit\tpolicy\tselected\tpdfs\tstatus_counts\t"
+            "probe_status_counts\tfail_matches\tfail_rules\tjson_path",
+        )
+        self.assertEqual(len(lines), 3)
+        self.assertIn("routine", lines[1])
+        self.assertIn("readiness", lines[2])
+        self.assertIn("probe-no-match,unsupported", lines[2])
+        self.assertNotIn("3807", output)
+        self.assertNotIn("8304", output)
+
+    def test_main_prints_fixture_manifest_json(self):
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            status = ds.main([str(self.FIXTURE_MANIFEST), "--limit", "1", "--json"])
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(status, 0)
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["policy"]["policy"], "readiness")
+        self.assertEqual(payload[0]["fail_on_rules"], ["probe-no-match", "unsupported"])
 
 
 if __name__ == "__main__":
