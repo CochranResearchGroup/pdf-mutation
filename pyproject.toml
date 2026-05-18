@@ -27,6 +27,7 @@ classifiers = [
 [project.scripts]
 pdf-glyph-replace = "pdf_glyph_replace:main"
 pdf-fixture-qdf = "pdf_fixture:main"
+pdf-inventory = "pdf_inventory:main"
 
 [tool.setuptools]
-py-modules = ["pdf_glyph_replace", "pdf_fixture"]
+py-modules = ["pdf_glyph_replace", "pdf_fixture", "pdf_inventory"]

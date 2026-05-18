@@ -2,6 +2,7 @@ import unittest
 
 import pdf_fixture as f
 import pdf_glyph_replace as p
+import pdf_inventory as inv
 
 
 CMAP_RANGE_STREAM = b"""/CIDInit /ProcSet findresource begin
@@ -201,6 +202,61 @@ class PdfFixtureTests(unittest.TestCase):
     def test_fixture_rejects_missing_characters(self):
         with self.assertRaises(ValueError):
             f.synthetic_qdf("missing Z")
+
+
+class PdfInventoryTests(unittest.TestCase):
+    def test_classify_qdf_reports_supported_synthetic_fixture_without_text(self):
+        qdf = f.synthetic_qdf("3807")
+
+        row = inv.classify_qdf(qdf)
+
+        self.assertEqual(row["status"], "supported")
+        self.assertEqual(row["type0_font_count"], 1)
+        self.assertEqual(row["decoded_font_resource_count"], 1)
+        self.assertEqual(row["text_object_count"], 1)
+        self.assertNotIn("decoded_text", row)
+
+    def test_classify_qdf_reports_unsupported_non_type0_fixture(self):
+        qdf = b"""1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 3 0 R >>
+stream
+BT
+/F1 12 Tf
+(hello) Tj
+ET
+endstream
+endobj
+"""
+
+        row = inv.classify_qdf(qdf)
+
+        self.assertEqual(row["status"], "unsupported")
+        self.assertEqual(row["type0_font_count"], 0)
+        self.assertEqual(row["decoded_font_resource_count"], 0)
+        self.assertEqual(row["text_object_count"], 1)
+
+    def test_write_outputs_writes_json_and_tsv(self):
+        row = inv.classify_qdf(f.synthetic_qdf("3807"))
+        row.update(
+            {
+                "input_pdf": "sample.pdf",
+                "size_bytes": 123,
+                "qpdf_check": True,
+                "qdf_conversion": True,
+                "duration_seconds": 0.1,
+            }
+        )
+        with p.tempfile.TemporaryDirectory() as tmp:
+            json_path = p.Path(tmp) / "inventory.json"
+            tsv_path = p.Path(tmp) / "inventory.tsv"
+
+            inv.write_outputs([row], json_path=json_path, tsv_path=tsv_path)
+
+            self.assertIn('"status": "supported"', json_path.read_text())
+            self.assertIn("sample.pdf", tsv_path.read_text())
 
 
 if __name__ == "__main__":

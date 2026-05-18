@@ -56,11 +56,12 @@ through PR checks.
 Before opening a PR, run:
 
 ```bash
-python -m py_compile pdf_glyph_replace.py pdf_fixture.py
+python -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py
 python -m unittest discover -s tests -v
 python -m build
 pdf-glyph-replace --version
 pdf-fixture-qdf --version
+pdf-inventory --version
 ```
 
 If your local Python installation blocks package installs, use a virtual
@@ -73,6 +74,7 @@ work/dev-venv/bin/python -m build
 work/dev-venv/bin/python -m pip install -e .
 work/dev-venv/bin/pdf-glyph-replace --version
 work/dev-venv/bin/pdf-fixture-qdf --version
+work/dev-venv/bin/pdf-inventory --version
 ```
 
 ## Tests
@@ -91,6 +93,7 @@ Add or update tests when a change affects:
 - Alignment behavior.
 - Report JSON shape.
 - CLI behavior.
+- PDF inventory classification.
 
 ## Release Changes
 

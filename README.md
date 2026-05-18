@@ -29,6 +29,7 @@ python3 -m venv .venv
 python -m pip install -e .
 pdf-glyph-replace --version
 pdf-fixture-qdf --version
+pdf-inventory --version
 pdf-glyph-replace input.pdf 3807 8304 -o output.pdf
 ```
 
@@ -106,15 +107,33 @@ The synthetic font intentionally contains only a small glyph set used by the
 tests and examples. If a repro needs more characters, extend the synthetic map
 in code rather than attaching a real private document.
 
+## PDF Inventory
+
+Use `pdf-inventory` to classify PDFs without mutating files or extracting
+document text:
+
+```bash
+pdf-inventory work/dogfood-pdfs/sample-*.pdf \
+  --json work/dogfood-pdfs/inventory/inventory.json \
+  --tsv work/dogfood-pdfs/inventory/inventory.tsv
+```
+
+The command reports structural support signals: `qpdf` validity, QDF conversion,
+object and stream counts, Type0 font count, `/ToUnicode` references, decoded
+font resource count, and text-object count. Unsupported-but-valid PDFs are
+reported with `status: "unsupported"` and exit code 0; only hard errors such as
+missing files or failed `qpdf --check` make the command fail.
+
 ## Validation
 
 Run the source-level tests:
 
 ```bash
-python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py
+python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py
 python3 -m unittest discover -s tests -v
 pdf-glyph-replace --version
 pdf-fixture-qdf --version
+pdf-inventory --version
 ```
 
 Run local PDF smoke tests when fixture PDFs are available:

@@ -4,10 +4,12 @@
 
 ## Validation
 
-- [ ] `python -m py_compile pdf_glyph_replace.py pdf_fixture.py`
+- [ ] `python -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py`
 - [ ] `python -m unittest discover -s tests -v`
 - [ ] `python -m build`
 - [ ] `pdf-glyph-replace --version`
+- [ ] `pdf-fixture-qdf --version`
+- [ ] `pdf-inventory --version`
 
 ## Privacy
 
