@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -62,7 +63,74 @@ def classify_qdf(qdf: bytes) -> dict[str, Any]:
     }
 
 
-def inventory_pdf(path: Path, *, keep_qdf_dir: Path | None = None) -> dict[str, Any]:
+def probe_qdf(
+    qdf: bytes,
+    *,
+    search: str,
+    replacement: str,
+    align: str,
+) -> dict[str, Any]:
+    """Return non-sensitive search feasibility signals for a QDF byte stream."""
+    try:
+        reports, decode_maps = glyph.analyze_qdf(qdf, search, replacement, align=align)
+    except SystemExit as exc:
+        return {
+            "search_length": len(search),
+            "replacement_length": len(replacement),
+            "search_sha256_12": hashlib.sha256(search.encode("utf-8")).hexdigest()[:12],
+            "replacement_sha256_12": hashlib.sha256(replacement.encode("utf-8")).hexdigest()[:12],
+            "align": align,
+            "status": "unsupported",
+            "reason": str(exc),
+            "total_matches": 0,
+            "feasible": False,
+            "match_count_by_font": [],
+        }
+
+    total = sum(report.match_count for report in reports)
+    feasible = total > 0 and all(report.feasible for report in reports)
+    if feasible:
+        status = "feasible"
+        reason = "all probe matches are feasible"
+    elif total:
+        status = "infeasible"
+        reason = "one or more probe matches are not feasible"
+    else:
+        status = "no_match"
+        reason = "probe text not found"
+
+    by_font: dict[str, int] = {}
+    reasons: list[str] = []
+    for report in reports:
+        by_font[report.font] = by_font.get(report.font, 0) + report.match_count
+        if report.reason and report.reason not in reasons:
+            reasons.append(report.reason)
+
+    return {
+        "search_length": len(search),
+        "replacement_length": len(replacement),
+        "search_sha256_12": hashlib.sha256(search.encode("utf-8")).hexdigest()[:12],
+        "replacement_sha256_12": hashlib.sha256(replacement.encode("utf-8")).hexdigest()[:12],
+        "align": align,
+        "status": status,
+        "reason": reason,
+        "total_matches": total,
+        "feasible": feasible,
+        "font_resource_count": len(decode_maps),
+        "match_count_by_font": [
+            {"font": font, "match_count": by_font[font]} for font in sorted(by_font)
+        ],
+        "infeasible_reasons": reasons,
+    }
+
+
+def inventory_pdf(
+    path: Path,
+    *,
+    keep_qdf_dir: Path | None = None,
+    probe: tuple[str, str] | None = None,
+    align: str = "exact",
+) -> dict[str, Any]:
     """Classify a PDF without mutating it or extracting text content."""
     started = time.time()
     result: dict[str, Any] = {
@@ -108,6 +176,8 @@ def inventory_pdf(path: Path, *, keep_qdf_dir: Path | None = None) -> dict[str, 
             result["qdf_path"] = str(kept)
 
     result.update(classify_qdf(qdf))
+    if probe:
+        result["probe"] = probe_qdf(qdf, search=probe[0], replacement=probe[1], align=align)
     result["duration_seconds"] = round(time.time() - started, 3)
     return result
 
@@ -131,30 +201,49 @@ def write_outputs(rows: list[dict[str, Any]], *, json_path: Path | None, tsv_pat
             "to_unicode_ref_count",
             "decoded_font_resource_count",
             "text_object_count",
+            "probe_status",
+            "probe_total_matches",
+            "probe_feasible",
             "duration_seconds",
         ]
         with tsv_path.open("w", encoding="utf-8") as handle:
             handle.write("\t".join(headers) + "\n")
             for row in rows:
-                handle.write("\t".join(str(row.get(header, "")) for header in headers) + "\n")
+                flat = dict(row)
+                probe = row.get("probe")
+                if isinstance(probe, dict):
+                    flat["probe_status"] = probe.get("status", "")
+                    flat["probe_total_matches"] = probe.get("total_matches", "")
+                    flat["probe_feasible"] = probe.get("feasible", "")
+                handle.write("\t".join(str(flat.get(header, "")) for header in headers) + "\n")
 
 
 def print_table(rows: list[dict[str, Any]]) -> None:
-    headers = ("input_pdf", "status", "type0", "decoded_fonts", "text_objects", "reason")
+    has_probe = any("probe" in row for row in rows)
+    headers = ["input_pdf", "status", "type0", "decoded_fonts", "text_objects"]
+    if has_probe:
+        headers.extend(["probe_status", "probe_matches", "probe_feasible"])
+    headers.append("reason")
     print("\t".join(headers))
     for row in rows:
-        print(
-            "\t".join(
+        values = [
+            str(row.get("input_pdf", "")),
+            str(row.get("status", "")),
+            str(row.get("type0_font_count", "")),
+            str(row.get("decoded_font_resource_count", "")),
+            str(row.get("text_object_count", "")),
+        ]
+        if has_probe:
+            probe = row.get("probe") if isinstance(row.get("probe"), dict) else {}
+            values.extend(
                 [
-                    str(row.get("input_pdf", "")),
-                    str(row.get("status", "")),
-                    str(row.get("type0_font_count", "")),
-                    str(row.get("decoded_font_resource_count", "")),
-                    str(row.get("text_object_count", "")),
-                    str(row.get("reason", "")),
+                    str(probe.get("status", "")),
+                    str(probe.get("total_matches", "")),
+                    str(probe.get("feasible", "")),
                 ]
             )
-        )
+        values.append(str(row.get("reason", "")))
+        print("\t".join(values))
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -166,13 +255,33 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--json", type=Path, help="write JSON inventory to this path")
     parser.add_argument("--tsv", type=Path, help="write TSV inventory to this path")
     parser.add_argument("--keep-qdf-dir", type=Path, help="write generated QDF files here")
+    parser.add_argument(
+        "--probe",
+        nargs=2,
+        metavar=("SEARCH", "REPLACEMENT"),
+        help="include non-sensitive match feasibility for this search/replacement pair",
+    )
+    parser.add_argument(
+        "--align",
+        choices=("exact", "left", "right"),
+        default="exact",
+        help="alignment policy used by --probe for length-changing replacements",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     glyph.require_tool("qpdf")
-    rows = [inventory_pdf(pdf, keep_qdf_dir=args.keep_qdf_dir) for pdf in args.pdfs]
+    rows = [
+        inventory_pdf(
+            pdf,
+            keep_qdf_dir=args.keep_qdf_dir,
+            probe=tuple(args.probe) if args.probe else None,
+            align=args.align,
+        )
+        for pdf in args.pdfs
+    ]
     write_outputs(rows, json_path=args.json, tsv_path=args.tsv)
     if not args.json:
         print_table(rows)

@@ -124,6 +124,19 @@ font resource count, and text-object count. Unsupported-but-valid PDFs are
 reported with `status: "unsupported"` and exit code 0; only hard errors such as
 missing files or failed `qpdf --check` make the command fail.
 
+Add `--probe SEARCH REPLACEMENT` to include non-mutating match feasibility
+signals in the inventory:
+
+```bash
+pdf-inventory work/dogfood-pdfs/sample-*.pdf \
+  --probe 3807 8304 \
+  --json work/dogfood-pdfs/inventory/probed.json
+```
+
+Probe output includes search/replacement lengths, short hashes, match counts,
+feasibility status, and infeasible reasons. It does not include literal probe
+strings or decoded document text.
+
 ## Validation
 
 Run the source-level tests:

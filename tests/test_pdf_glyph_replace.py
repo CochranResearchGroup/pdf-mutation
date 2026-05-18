@@ -238,6 +238,30 @@ endobj
         self.assertEqual(row["decoded_font_resource_count"], 0)
         self.assertEqual(row["text_object_count"], 1)
 
+    def test_probe_qdf_reports_feasible_match_without_literal_text(self):
+        probe = inv.probe_qdf(f.synthetic_qdf("3807"), search="3807", replacement="8304", align="exact")
+
+        self.assertEqual(probe["status"], "feasible")
+        self.assertEqual(probe["total_matches"], 1)
+        self.assertTrue(probe["feasible"])
+        self.assertEqual(probe["match_count_by_font"], [{"font": "F4", "match_count": 1}])
+        self.assertNotIn("3807", str(probe))
+        self.assertNotIn("8304", str(probe))
+
+    def test_probe_qdf_reports_no_match_without_failure(self):
+        probe = inv.probe_qdf(f.synthetic_qdf("3807"), search="9999", replacement="8304", align="exact")
+
+        self.assertEqual(probe["status"], "no_match")
+        self.assertEqual(probe["total_matches"], 0)
+        self.assertFalse(probe["feasible"])
+
+    def test_probe_qdf_reports_unsupported_without_failure(self):
+        probe = inv.probe_qdf(b"1 0 obj\n<<>>\nendobj\n", search="3807", replacement="8304", align="exact")
+
+        self.assertEqual(probe["status"], "unsupported")
+        self.assertEqual(probe["total_matches"], 0)
+        self.assertFalse(probe["feasible"])
+
     def test_write_outputs_writes_json_and_tsv(self):
         row = inv.classify_qdf(f.synthetic_qdf("3807"))
         row.update(
@@ -247,6 +271,12 @@ endobj
                 "qpdf_check": True,
                 "qdf_conversion": True,
                 "duration_seconds": 0.1,
+                "probe": inv.probe_qdf(
+                    f.synthetic_qdf("3807"),
+                    search="3807",
+                    replacement="8304",
+                    align="exact",
+                ),
             }
         )
         with p.tempfile.TemporaryDirectory() as tmp:
@@ -257,6 +287,7 @@ endobj
 
             self.assertIn('"status": "supported"', json_path.read_text())
             self.assertIn("sample.pdf", tsv_path.read_text())
+            self.assertIn("probe_status", tsv_path.read_text())
 
 
 if __name__ == "__main__":
