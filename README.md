@@ -30,6 +30,7 @@ python -m pip install -e .
 pdf-glyph-replace --version
 pdf-fixture-qdf --version
 pdf-inventory --version
+pdf-dogfood --version
 pdf-glyph-replace input.pdf 3807 8304 -o output.pdf
 ```
 
@@ -172,6 +173,17 @@ to stderr. Available rules are `error`, `unsupported`, `skipped`,
 For repeatable local corpus checks, see
 `docs/dev/dogfood-runbook.md`.
 
+The same routine dogfood gate is available as a wrapper command:
+
+```bash
+pdf-dogfood --probe 3807 8304
+```
+
+By default, `pdf-dogfood` scans `work/dogfood-pdfs/sample-*.pdf`, writes
+`work/dogfood-pdfs/inventory/dogfood.json` and `.tsv`, applies
+`--max-input-bytes 50000000`, and fails on `error`, `qpdf-check-failed`,
+`qdf-conversion-failed`, or `probe-feasible`.
+
 ## Validation
 
 Run the source-level tests:
@@ -182,6 +194,7 @@ python3 -m unittest discover -s tests -v
 pdf-glyph-replace --version
 pdf-fixture-qdf --version
 pdf-inventory --version
+pdf-dogfood --version
 ```
 
 Run local PDF smoke tests when fixture PDFs are available:
@@ -215,11 +228,14 @@ the full release checklist.
 Release gate:
 
 ```bash
-python3 -m py_compile pdf_glyph_replace.py
+python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_dogfood.py
 python3 -m unittest discover -s tests -v
 python3 -m venv work/release-venv
 work/release-venv/bin/python -m pip install -e .
 work/release-venv/bin/pdf-glyph-replace --version
+work/release-venv/bin/pdf-fixture-qdf --version
+work/release-venv/bin/pdf-inventory --version
+work/release-venv/bin/pdf-dogfood --version
 work/release-venv/bin/python -m pip wheel . -w work/dist
 ```
 

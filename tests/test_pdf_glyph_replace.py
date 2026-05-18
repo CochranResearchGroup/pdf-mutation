@@ -3,6 +3,7 @@ import io
 import unittest
 import unittest.mock
 
+import pdf_dogfood as d
 import pdf_fixture as f
 import pdf_glyph_replace as p
 import pdf_inventory as inv
@@ -436,6 +437,48 @@ endobj
             self.assertIn('"status": "supported"', json_path.read_text())
             self.assertIn("sample.pdf", tsv_path.read_text())
             self.assertIn("probe_status", tsv_path.read_text())
+
+
+class PdfDogfoodTests(unittest.TestCase):
+    def test_build_inventory_argv_uses_canonical_defaults(self):
+        args = d.parse_args(["--probe", "3807", "8304"])
+
+        argv = d.build_inventory_argv(args)
+
+        self.assertIn("work/dogfood-pdfs/sample-*.pdf", argv)
+        self.assertIn("--summary", argv)
+        self.assertIn("--probe", argv)
+        self.assertEqual(
+            argv[argv.index("--probe") + 1 : argv.index("--probe") + 3],
+            ["3807", "8304"],
+        )
+        self.assertEqual(
+            argv[argv.index("--fail-on") + 1 :],
+            ["error", "qpdf-check-failed", "qdf-conversion-failed", "probe-feasible"],
+        )
+        self.assertIn("work/dogfood-pdfs/inventory/dogfood.json", argv)
+
+    def test_build_inventory_argv_can_run_report_only(self):
+        args = d.parse_args(["--no-fail-on", "--name", "baseline"])
+        if args.no_fail_on:
+            args.fail_on = []
+
+        argv = d.build_inventory_argv(args)
+
+        self.assertNotIn("--fail-on", argv)
+        self.assertIn("work/dogfood-pdfs/inventory/baseline.json", argv)
+
+    def test_expand_pdf_args_expands_globs(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            root = p.Path(tmp)
+            first = root / "a.pdf"
+            second = root / "b.pdf"
+            first.write_text("a")
+            second.write_text("b")
+
+            expanded = d.expand_pdf_args([root / "*.pdf"])
+
+            self.assertEqual(expanded, [first, second])
 
 
 if __name__ == "__main__":

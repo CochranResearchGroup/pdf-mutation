@@ -3,6 +3,16 @@
 Use this runbook to inventory local PDF samples without committing private
 documents or generated reports.
 
+The routine gate can be run with the wrapper command:
+
+```bash
+pdf-dogfood --probe 3807 8304
+```
+
+By default, this expands `work/dogfood-pdfs/sample-*.pdf`, writes JSON and TSV
+reports under `work/dogfood-pdfs/inventory/`, applies `--max-input-bytes
+50000000`, and uses the routine fail-on policy from this runbook.
+
 ## Corpus Location
 
 Keep dogfood PDFs under the ignored scratch tree:
@@ -70,6 +80,12 @@ For routine dogfood, fail only on hard processing errors or a probe that finds a
 feasible mutation target:
 
 ```bash
+pdf-dogfood --probe 3807 8304
+```
+
+Equivalent explicit `pdf-inventory` command:
+
+```bash
 pdf-inventory work/dogfood-pdfs/sample-*.pdf \
   --probe 3807 8304 \
   --summary \
@@ -114,4 +130,3 @@ row/rule table to stderr. Default inventory remains report-only except for hard
 ```bash
 git ls-files | rg '\.pdf$' || true
 ```
-
