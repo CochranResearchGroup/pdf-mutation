@@ -732,6 +732,38 @@ class PdfDogfoodSummaryTests(unittest.TestCase):
         self.assertIn("readiness", lines[1])
         self.assertIn("routine-latest.json", lines[2])
 
+    def test_main_prints_latest_by_policy_markdown(self):
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            status = ds.main([str(self.FIXTURE_MANIFEST), "--latest-by-policy", "--markdown"])
+
+        output = stdout.getvalue()
+        lines = output.splitlines()
+        self.assertEqual(status, 0)
+        self.assertEqual(
+            lines[0],
+            "| timestamp_unix | exit | policy | selected | pdfs | status_counts | "
+            "probe_status_counts | fail_matches | fail_rules | json_path |",
+        )
+        self.assertEqual(lines[1], "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+        self.assertEqual(len(lines), 4)
+        self.assertIn("| 1700000060 | 2 | readiness | readiness | 3 |", lines[2])
+        self.assertIn("probe-no-match,unsupported", lines[2])
+        self.assertIn("routine-latest.json", lines[3])
+        self.assertNotIn("3807", output)
+        self.assertNotIn("8304", output)
+
+    def test_markdown_cell_escapes_table_delimiters_and_newlines(self):
+        self.assertEqual(ds.markdown_cell(r"a\b|c\nd"), r"a\\b\|c\\nd")
+        self.assertEqual(ds.markdown_cell("a|b\nc"), r"a\|b<br>c")
+
+    def test_main_rejects_json_and_markdown(self):
+        with self.assertRaises(SystemExit) as raised:
+            ds.main([str(self.FIXTURE_MANIFEST), "--json", "--markdown"])
+
+        self.assertEqual(str(raised.exception), "--json and --markdown are mutually exclusive")
+
     def test_main_prints_latest_by_policy_json_after_filters(self):
         stdout = io.StringIO()
 
