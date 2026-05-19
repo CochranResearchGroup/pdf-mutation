@@ -754,6 +754,54 @@ class PdfDogfoodSummaryTests(unittest.TestCase):
         self.assertNotIn("3807", output)
         self.assertNotIn("8304", output)
 
+    def test_main_writes_markdown_output_file(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            output_path = p.Path(tmp) / "summaries" / "latest.md"
+            stdout = io.StringIO()
+
+            with contextlib.redirect_stdout(stdout):
+                status = ds.main(
+                    [
+                        str(self.FIXTURE_MANIFEST),
+                        "--latest-by-policy",
+                        "--markdown",
+                        "--output",
+                        str(output_path),
+                    ]
+                )
+
+            content = output_path.read_text(encoding="utf-8")
+            self.assertEqual(status, 0)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn("| timestamp_unix | exit | policy |", content)
+            self.assertIn("routine-latest.json", content)
+            self.assertTrue(content.endswith("\n"))
+            self.assertNotIn("3807", content)
+            self.assertNotIn("8304", content)
+
+    def test_main_writes_json_output_file(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            output_path = p.Path(tmp) / "summary.json"
+
+            status = ds.main([str(self.FIXTURE_MANIFEST), "--limit", "1", "--json", "--output", str(output_path)])
+
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(status, 0)
+            self.assertEqual(len(payload), 1)
+            self.assertEqual(payload[0]["policy"]["json_path"], "work/dogfood-pdfs/inventory/routine-latest.json")
+
+    def test_main_writes_health_output_file_and_preserves_status(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            output_path = p.Path(tmp) / "health.txt"
+            stdout = io.StringIO()
+
+            with contextlib.redirect_stdout(stdout):
+                status = ds.main([str(self.FIXTURE_MANIFEST), "--health", "--output", str(output_path)])
+
+            self.assertEqual(status, 2)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn("policy=readiness", output_path.read_text(encoding="utf-8"))
+
     def test_markdown_cell_escapes_table_delimiters_and_newlines(self):
         self.assertEqual(ds.markdown_cell(r"a\b|c\nd"), r"a\\b\|c\\nd")
         self.assertEqual(ds.markdown_cell("a|b\nc"), r"a\|b<br>c")
