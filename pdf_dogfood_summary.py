@@ -166,21 +166,41 @@ def rows_for_records(records: list[dict[str, Any]]) -> list[list[str]]:
     return rows
 
 
-def print_table(records: list[dict[str, Any]]) -> None:
-    print("\t".join(TABLE_HEADERS))
+def render_table(records: list[dict[str, Any]]) -> str:
+    lines = ["\t".join(TABLE_HEADERS)]
     for row in rows_for_records(records):
-        print("\t".join(row))
+        lines.append("\t".join(row))
+    return "\n".join(lines) + "\n"
+
+
+def print_table(records: list[dict[str, Any]]) -> None:
+    print(render_table(records), end="")
 
 
 def markdown_cell(value: str) -> str:
     return value.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
 
 
-def print_markdown(records: list[dict[str, Any]]) -> None:
-    print("| " + " | ".join(markdown_cell(header) for header in TABLE_HEADERS) + " |")
-    print("| " + " | ".join("---" for _ in TABLE_HEADERS) + " |")
+def render_markdown(records: list[dict[str, Any]]) -> str:
+    lines = [
+        "| " + " | ".join(markdown_cell(header) for header in TABLE_HEADERS) + " |",
+        "| " + " | ".join("---" for _ in TABLE_HEADERS) + " |",
+    ]
     for row in rows_for_records(records):
-        print("| " + " | ".join(markdown_cell(cell) for cell in row) + " |")
+        lines.append("| " + " | ".join(markdown_cell(cell) for cell in row) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def print_markdown(records: list[dict[str, Any]]) -> None:
+    print(render_markdown(records), end="")
+
+
+def write_output(text: str, output_path: Path | None) -> None:
+    if output_path is None:
+        print(text, end="")
+        return
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(text, encoding="utf-8")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -208,6 +228,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--markdown",
         action="store_true",
         help="write selected manifest records as a Markdown table instead of a TSV table",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="write summary output to this path instead of stdout; parent directories are created",
     )
     parser.add_argument(
         "--policy",
@@ -256,18 +281,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.health:
         status, line = health_status(health_record(records))
-        print(line)
+        write_output(line + "\n", args.output)
         return status
     if args.latest_by_policy:
         records = latest_by_policy(records)
     elif args.limit:
         records = records[-args.limit :]
     if args.json:
-        print(json.dumps(records, indent=2, sort_keys=True))
+        text = json.dumps(records, indent=2, sort_keys=True) + "\n"
     elif args.markdown:
-        print_markdown(records)
+        text = render_markdown(records)
     else:
-        print_table(records)
+        text = render_table(records)
+    write_output(text, args.output)
     return 0
 
 

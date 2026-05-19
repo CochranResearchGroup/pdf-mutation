@@ -198,6 +198,7 @@ Use `pdf-dogfood-summary` to print recent manifest records as a TSV table:
 pdf-dogfood-summary --limit 10
 pdf-dogfood-summary --latest-by-policy
 pdf-dogfood-summary --latest-by-policy --markdown
+pdf-dogfood-summary --latest-by-policy --markdown --output work/dogfood-pdfs/inventory/latest.md
 pdf-dogfood-summary --health
 pdf-dogfood-summary --fail-only --policy readiness
 pdf-dogfood-summary --exit-code 2 --json
