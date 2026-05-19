@@ -14,6 +14,18 @@ import pdf_dogfood
 
 __version__ = pdf_dogfood.__version__
 HEALTH_POLICIES = ["readiness", "complete"]
+TABLE_HEADERS = [
+    "timestamp_unix",
+    "exit",
+    "policy",
+    "selected",
+    "pdfs",
+    "status_counts",
+    "probe_status_counts",
+    "fail_matches",
+    "fail_rules",
+    "json_path",
+]
 
 
 def load_manifest(path: Path) -> list[dict[str, Any]]:
@@ -155,21 +167,20 @@ def rows_for_records(records: list[dict[str, Any]]) -> list[list[str]]:
 
 
 def print_table(records: list[dict[str, Any]]) -> None:
-    headers = [
-        "timestamp_unix",
-        "exit",
-        "policy",
-        "selected",
-        "pdfs",
-        "status_counts",
-        "probe_status_counts",
-        "fail_matches",
-        "fail_rules",
-        "json_path",
-    ]
-    print("\t".join(headers))
+    print("\t".join(TABLE_HEADERS))
     for row in rows_for_records(records):
         print("\t".join(row))
+
+
+def markdown_cell(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
+
+
+def print_markdown(records: list[dict[str, Any]]) -> None:
+    print("| " + " | ".join(markdown_cell(header) for header in TABLE_HEADERS) + " |")
+    print("| " + " | ".join("---" for _ in TABLE_HEADERS) + " |")
+    for row in rows_for_records(records):
+        print("| " + " | ".join(markdown_cell(cell) for cell in row) + " |")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -192,6 +203,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--json",
         action="store_true",
         help="write selected manifest records as JSON instead of a TSV table",
+    )
+    parser.add_argument(
+        "--markdown",
+        action="store_true",
+        help="write selected manifest records as a Markdown table instead of a TSV table",
     )
     parser.add_argument(
         "--policy",
@@ -226,6 +242,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
+    if args.json and args.markdown:
+        raise SystemExit("--json and --markdown are mutually exclusive")
     if args.limit < 0:
         raise SystemExit("--limit must be non-negative")
     if not args.manifest.exists():
@@ -246,6 +264,8 @@ def main(argv: list[str] | None = None) -> int:
         records = records[-args.limit :]
     if args.json:
         print(json.dumps(records, indent=2, sort_keys=True))
+    elif args.markdown:
+        print_markdown(records)
     else:
         print_table(records)
     return 0
