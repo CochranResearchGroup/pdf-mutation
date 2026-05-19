@@ -57,3 +57,39 @@ git tag -a vX.Y.Z -m "vX.Y.Z"
 ```
 
 Do not tag until validation has passed on the exact commit being tagged.
+
+## Post-Release
+
+After the tag workflow uploads release assets, install the published wheel from
+GitHub in a fresh environment outside the source checkout:
+
+```bash
+SMOKE_ROOT="$(mktemp -d /tmp/pdf-mutation-release-smoke.XXXXXX)"
+python3 -m venv "$SMOKE_ROOT/venv"
+"$SMOKE_ROOT/venv/bin/python" -m pip install --upgrade pip
+"$SMOKE_ROOT/venv/bin/python" -m pip install \
+  "https://github.com/CochranResearchGroup/pdf-mutation/releases/download/vX.Y.Z/pdf_mutation-X.Y.Z-py3-none-any.whl"
+cp tests/fixtures/dogfood-manifest.jsonl "$SMOKE_ROOT/dogfood-manifest.jsonl"
+cd "$SMOKE_ROOT"
+venv/bin/pdf-glyph-replace --version
+venv/bin/pdf-fixture-qdf --version
+venv/bin/pdf-inventory --version
+venv/bin/pdf-dogfood --version
+venv/bin/pdf-dogfood-summary --version
+venv/bin/pdf-dogfood-summary dogfood-manifest.jsonl --latest-by-policy
+set +e
+venv/bin/pdf-dogfood-summary dogfood-manifest.jsonl --health
+health_rc=$?
+set -e
+test "$health_rc" -eq 2
+venv/bin/python - <<'PY'
+import importlib.metadata
+import pdf_glyph_replace
+
+print(importlib.metadata.version("pdf-mutation"))
+print(pdf_glyph_replace.__file__)
+PY
+```
+
+Confirm the printed import path is under the smoke venv `site-packages`, not
+the repo checkout.
