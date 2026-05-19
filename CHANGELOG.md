@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.1.2 | Dogfood Reporting
+
+Maintenance release that adds the public dogfood inventory and manifest
+reporting surface.
+
+### Added
+
+- `pdf-inventory` structural inventory command with JSON/TSV output, probe
+  summaries, size guards, status summaries, and fail-on rules.
+- `pdf-dogfood` wrapper for routine, complete, and readiness dogfood policies.
+- Compact JSONL dogfood run manifests with non-literal probe metadata.
+- `pdf-dogfood-summary` manifest table/JSON summaries, filters,
+  latest-by-policy view, and manifest health gate.
+- Manual GitHub Actions dogfood health workflow using a synthetic fixture and
+  non-blocking workflow notices.
+
+### Changed
+
+- CI now compiles and smokes the inventory, dogfood, and manifest summary
+  console entry points.
+- Release source distributions include the synthetic dogfood manifest fixture
+  used by tests.
+
 ## v0.1.1 | Release Automation Maintenance
 
 Maintenance release that includes the public GitHub release automation added

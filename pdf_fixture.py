@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 DEFAULT_CIDS: dict[str, str] = {
     " ": "0003",

@@ -16,7 +16,7 @@ from typing import Any
 import pdf_glyph_replace as glyph
 
 
-__version__ = "0.1.1"
+__version__ = glyph.__version__
 
 
 FAIL_ON_CHOICES = (
