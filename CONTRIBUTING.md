@@ -56,9 +56,10 @@ through PR checks.
 Before opening a PR, run:
 
 ```bash
-python -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py
+python -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_mutation/*.py
 python -m unittest discover -s tests -v
 python -m build
+python -c "from pdf_mutation.engine import plan_qdf; print(plan_qdf.__name__)"
 pdf-glyph-replace --version
 pdf-fixture-qdf --version
 pdf-inventory --version
@@ -72,6 +73,7 @@ python -m venv work/dev-venv
 work/dev-venv/bin/python -m pip install --upgrade pip build
 work/dev-venv/bin/python -m build
 work/dev-venv/bin/python -m pip install -e .
+work/dev-venv/bin/python -c "from pdf_mutation.engine import plan_qdf; print(plan_qdf.__name__)"
 work/dev-venv/bin/pdf-glyph-replace --version
 work/dev-venv/bin/pdf-fixture-qdf --version
 work/dev-venv/bin/pdf-inventory --version

@@ -25,7 +25,7 @@ classifiers = [
 ]
 
 [project.scripts]
-pdf-glyph-replace = "pdf_glyph_replace:main"
+pdf-glyph-replace = "pdf_mutation.cli:main"
 pdf-fixture-qdf = "pdf_fixture:main"
 pdf-inventory = "pdf_inventory:main"
 pdf-dogfood = "pdf_dogfood:main"
@@ -33,3 +33,4 @@ pdf-dogfood-summary = "pdf_dogfood_summary:main"
 
 [tool.setuptools]
 py-modules = ["pdf_glyph_replace", "pdf_fixture", "pdf_inventory", "pdf_dogfood", "pdf_dogfood_summary"]
+packages = ["pdf_mutation"]

@@ -167,7 +167,7 @@ Progress:
 
 ### M11 | Engine And CLI Boundary
 
-Status: PLANNED
+Status: IN PROGRESS
 
 Goal: Split reusable mutation logic from command-line orchestration.
 
@@ -183,6 +183,13 @@ Acceptance Criteria:
 - CLI behavior remains backward compatible for current commands.
 - External callers can build a plan and apply it through Python without parsing
   CLI output.
+
+Progress:
+- Added the `pdf_mutation` package namespace with `engine`, `reports`,
+  `adapters`, and `cli` modules.
+- Moved the console script entrypoint to `pdf_mutation.cli:main` while keeping
+  `pdf_glyph_replace.py` as the compatibility implementation.
+- Added import-level API tests for engine and reporting helpers.
 
 ### M12 | Product Release Candidate
 

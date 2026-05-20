@@ -9,6 +9,8 @@ import pdf_dogfood_summary as ds
 import pdf_fixture as f
 import pdf_glyph_replace as p
 import pdf_inventory as inv
+from pdf_mutation import engine
+from pdf_mutation import reports as report_api
 
 
 CMAP_RANGE_STREAM = b"""/CIDInit /ProcSet findresource begin
@@ -135,6 +137,42 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(cmap["0032"], "8")
         self.assertEqual(cmap["0119"], "a")
         self.assertNotIn("0000", cmap)
+
+    def test_importable_engine_api_matches_compatibility_module(self):
+        qdf = f.synthetic_qdf("3807")
+
+        payload = engine.plan_qdf(qdf, "3807", "8304", align="exact")
+        edited, count = engine.replace_qdf(qdf, "3807", "8304", align="exact")
+
+        self.assertEqual(payload["expected"]["patchable_matches"], 1)
+        self.assertEqual(count, 1)
+        self.assertIn(b"<0032002D002A002E> Tj", edited)
+        self.assertIs(engine.plan_qdf, p.plan_qdf)
+
+    def test_importable_report_api_exposes_layout_helpers(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            root = p.Path(tmp)
+            before = root / "before.html"
+            after = root / "after.html"
+            before.write_text(
+                '<word xMin="100" yMin="20" xMax="150" yMax="30">37.34</word>',
+                encoding="utf-8",
+            )
+            after.write_text(
+                '<word xMin="100.1" yMin="20" xMax="165" yMax="30">138.46</word>',
+                encoding="utf-8",
+            )
+
+            payload = report_api.bbox_alignment_assertions(
+                before_path=before,
+                after_path=after,
+                search="37.34",
+                replacement="138.46",
+                align="left",
+            )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(payload["assertions"][0]["passed"])
 
     def test_exact_replacement_rewrites_only_matching_cids(self):
         qdf = f.synthetic_qdf("3807", one_glyph_per_line=True)
