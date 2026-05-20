@@ -89,7 +89,9 @@ To write a reviewable mutation plan without editing the PDF:
 
 Plan JSON is non-sensitive by default. It includes input fingerprint metadata,
 font resources, expected candidate counts, patchable match entries, glyph CID
-spans, replacement CIDs, and split candidates.
+spans, replacement CIDs, and split candidates. Split candidates include ordered
+segment metadata and font-specific blockers, but remain unpatchable until a
+separate segmented-plan schema is implemented.
 
 To apply a reviewed same-glyph-count plan later:
 
@@ -336,6 +338,8 @@ This first version is intentionally strict by default:
   after verifying the input fingerprint and planned QDF byte spans;
 - `--expect-count N` fails unless the operation finds exactly `N` patchable or
   applied matches, and write modes fail before producing an output PDF;
+- split candidates record per-segment font resources and blockers but are
+  audit-only under the current plan schema;
 - replacement characters must already exist in the active PDF font CMap;
 - matches must fit inside one `BT ... ET` text object;
 - supported exact-mode text drawing forms are hexadecimal `<...> Tj` and simple
