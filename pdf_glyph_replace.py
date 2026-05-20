@@ -96,6 +96,9 @@ class AuditSplitMatch:
     match_count: int
     patchable: bool
     reason: str
+    split_kind: str = ""
+    segments: list[dict[str, object]] = dataclasses.field(default_factory=list)
+    blockers: list[dict[str, object]] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -127,6 +130,9 @@ class PlanSplitCandidate:
     stream_objects: list[int | None]
     fonts: list[str]
     match_index: int
+    split_kind: str = ""
+    segments: list[dict[str, object]] = dataclasses.field(default_factory=list)
+    blockers: list[dict[str, object]] = dataclasses.field(default_factory=list)
 
 
 def run(args: list[str], *, stdin: bytes | None = None) -> bytes:
@@ -637,6 +643,74 @@ def chunk_spans_for_match(glyphs: list[Glyph], start: int, replacement_codes: li
     return spans
 
 
+def split_kind_for_segments(segments: list[dict[str, object]]) -> str:
+    fonts = {str(segment["font"]) for segment in segments}
+    objects = {int(segment["text_object_index"]) for segment in segments}
+    if len(fonts) > 1 and len(objects) > 1:
+        return "cross_text_object_and_font"
+    if len(fonts) > 1:
+        return "cross_font"
+    return "cross_text_object"
+
+
+def split_segments_for_match(
+    *,
+    ranges: list[tuple[int, int, dict[str, object]]],
+    start: int,
+    end: int,
+    search_length: int,
+    replacement: str,
+    encode_maps: dict[str, dict[str, str]],
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    segments: list[dict[str, object]] = []
+    blockers: list[dict[str, object]] = []
+    same_length = len(replacement) == search_length
+    for range_start, range_end, meta in ranges:
+        if range_start >= end or range_end <= start:
+            continue
+        font = str(meta["font"])
+        glyph_start = max(start, range_start) - range_start
+        glyph_end = min(end, range_end) - range_start
+        replacement_available = False
+        missing_count = 0
+        if same_length:
+            replacement_part = replacement[
+                max(start, range_start) - start : min(end, range_end) - start
+            ]
+            encode = encode_maps.get(font, {})
+            missing_count = sum(1 for char in replacement_part if char not in encode)
+            replacement_available = missing_count == 0
+        segment = {
+            "text_object_index": int(meta["text_object_index"]),
+            "stream_object": meta["stream_object"],
+            "font": font,
+            "glyph_start": glyph_start,
+            "glyph_end": glyph_end,
+            "replacement_glyphs_available": replacement_available,
+            "missing_replacement_glyph_count": missing_count,
+        }
+        segments.append(segment)
+        if same_length and not replacement_available:
+            blockers.append(
+                {
+                    "font": font,
+                    "text_object_index": int(meta["text_object_index"]),
+                    "reason": "replacement character(s) not present in active font",
+                    "missing_replacement_glyph_count": missing_count,
+                }
+            )
+        elif not same_length:
+            blockers.append(
+                {
+                    "font": font,
+                    "text_object_index": int(meta["text_object_index"]),
+                    "reason": "segmented length-changing replacement is not designed",
+                    "missing_replacement_glyph_count": 0,
+                }
+            )
+    return segments, blockers
+
+
 def plan_qdf(
     qdf: bytes,
     search: str,
@@ -743,6 +817,14 @@ def plan_qdf(
             if range_start < end and range_end > start
         ]
         if len(overlapped) > 1:
+            segments, blockers = split_segments_for_match(
+                ranges=decoded_ranges,
+                start=start,
+                end=end,
+                search_length=len(search),
+                replacement=replacement,
+                encode_maps=encode_maps,
+            )
             split_candidates.append(
                 PlanSplitCandidate(
                     id=f"s{len(split_candidates) + 1}",
@@ -753,6 +835,9 @@ def plan_qdf(
                     stream_objects=[meta["stream_object"] for meta in overlapped],
                     fonts=[str(meta["font"]) for meta in overlapped],
                     match_index=match_index,
+                    split_kind=split_kind_for_segments(segments),
+                    segments=segments,
+                    blockers=blockers,
                 )
             )
 
@@ -798,6 +883,7 @@ def audit_qdf(qdf: bytes, search: str, replacement: str, *, align: str) -> dict[
 
     text_objects: list[AuditTextObject] = []
     decoded_ranges: list[tuple[int, int, AuditTextObject]] = []
+    split_ranges: list[tuple[int, int, dict[str, object]]] = []
     text_object_index = 0
     joined_parts: list[str] = []
     cursor = 0
@@ -854,6 +940,17 @@ def audit_qdf(qdf: bytes, search: str, replacement: str, *, align: str) -> dict[
             text_objects.append(audit_object)
             joined_parts.append(decoded)
             decoded_ranges.append((cursor, cursor + len(decoded), audit_object))
+            split_ranges.append(
+                (
+                    cursor,
+                    cursor + len(decoded),
+                    {
+                        "text_object_index": text_object_index,
+                        "stream_object": stream_object,
+                        "font": font_name,
+                    },
+                )
+            )
             cursor += len(decoded)
 
     split_matches: list[AuditSplitMatch] = []
@@ -870,6 +967,14 @@ def audit_qdf(qdf: bytes, search: str, replacement: str, *, align: str) -> dict[
             if range_start < end and range_end > index
         ]
         if len(overlapped) > 1:
+            segments, blockers = split_segments_for_match(
+                ranges=split_ranges,
+                start=index,
+                end=end,
+                search_length=len(search),
+                replacement=replacement,
+                encode_maps=encode_maps,
+            )
             split_matches.append(
                 AuditSplitMatch(
                     text_object_indexes=[obj.text_object_index for obj in overlapped],
@@ -878,6 +983,9 @@ def audit_qdf(qdf: bytes, search: str, replacement: str, *, align: str) -> dict[
                     match_count=1,
                     patchable=False,
                     reason="match spans multiple text objects or font resources",
+                    split_kind=split_kind_for_segments(segments),
+                    segments=segments,
+                    blockers=blockers,
                 )
             )
         start = index + len(search)

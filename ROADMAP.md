@@ -111,7 +111,7 @@ Progress:
 
 ### M9 | Mixed-Font Strategy
 
-Status: PLANNED
+Status: DONE
 
 Goal: Turn mixed-font documents from vague unsupported cases into explicit,
 deterministic behavior.
@@ -129,6 +129,14 @@ Acceptance Criteria:
 - No cross-font mutation is attempted without an explicit segmented plan.
 - Mixed-font documents remain useful audit inputs even when no mutation is
   possible.
+
+Progress:
+- Added explicit split candidate segment metadata and font-specific blockers.
+- Documented the future segmented-plan contract in
+  `docs/dev/segmented-plan-contract.md`; split candidates remain unpatchable
+  under the current plan schema.
+- Added tests for adjacent same-font objects, cross-font apparent words, and a
+  replacement glyph missing in only one segment.
 
 ### M10 | Layout Evidence
 

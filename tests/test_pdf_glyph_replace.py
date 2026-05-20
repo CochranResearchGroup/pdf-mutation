@@ -52,8 +52,14 @@ end
 """
 
 
-def mixed_font_qdf(*text_objects: bytes) -> bytes:
+def mixed_font_qdf(
+    *text_objects: bytes,
+    f4_cid_map: dict[str, str] | None = None,
+    f5_cid_map: dict[str, str] | None = None,
+) -> bytes:
     body = b"\nET\nBT\n".join(text_objects)
+    f4_cmap = f.cmap_stream(f4_cid_map)
+    f5_cmap = f.cmap_stream(f5_cid_map)
     return (
         b"""1 0 obj
 <<
@@ -91,7 +97,7 @@ endobj
 >>
 stream
 """
-        + f.cmap_stream()
+        + f4_cmap
         + b"""endstream
 endobj
 59 0 obj
@@ -100,7 +106,7 @@ endobj
 >>
 stream
 """
-        + f.cmap_stream()
+        + f5_cmap
         + b"""endstream
 endobj
 51 0 obj
@@ -271,6 +277,15 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         )
         self.assertEqual(payload["split_matches"][0]["fonts"], ["F4", "F5"])
         self.assertFalse(payload["split_matches"][0]["patchable"])
+        self.assertEqual(payload["split_matches"][0]["split_kind"], "cross_text_object_and_font")
+        self.assertEqual(
+            [
+                (segment["text_object_index"], segment["font"], segment["glyph_start"], segment["glyph_end"])
+                for segment in payload["split_matches"][0]["segments"]
+            ],
+            [(1, "F4", 0, 2), (2, "F5", 0, 2)],
+        )
+        self.assertEqual(payload["split_matches"][0]["blockers"], [])
         self.assertEqual([obj["font"] for obj in payload["text_objects"]], ["F4", "F5", "F5"])
         self.assertEqual([obj["match_count"] for obj in payload["text_objects"]], [0, 0, 0])
         self.assertFalse(payload["privacy"]["decoded_text_included"])
@@ -361,6 +376,32 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(payload["split_candidates"][0]["text_object_indexes"], [1, 2])
         self.assertEqual(payload["split_candidates"][0]["fonts"], ["F4", "F5"])
         self.assertFalse(payload["split_candidates"][0]["patchable"])
+        self.assertEqual(payload["split_candidates"][0]["split_kind"], "cross_text_object_and_font")
+        self.assertEqual(
+            [
+                (segment["text_object_index"], segment["font"], segment["glyph_start"], segment["glyph_end"])
+                for segment in payload["split_candidates"][0]["segments"]
+            ],
+            [(1, "F4", 0, 2), (2, "F5", 0, 2)],
+        )
+        self.assertEqual(payload["split_candidates"][0]["blockers"], [])
+
+    def test_plan_qdf_records_adjacent_same_font_split_as_unpatchable_segmented_candidate(self):
+        qdf = f.qdf_document(
+            f.text_object("38", font="F4", x="100", y="10"),
+            f.text_object("07", font="F4", x="140", y="10"),
+        )
+
+        payload = p.plan_qdf(qdf, "3807", "8304", align="exact")
+
+        self.assertEqual(payload["expected"]["total_candidates"], 1)
+        self.assertEqual(payload["expected"]["patchable_matches"], 0)
+        self.assertEqual(payload["expected"]["split_candidates"], 1)
+        split = payload["split_candidates"][0]
+        self.assertEqual(split["split_kind"], "cross_text_object")
+        self.assertEqual(split["fonts"], ["F4", "F4"])
+        self.assertEqual(split["blockers"], [])
+        self.assertTrue(all(segment["replacement_glyphs_available"] for segment in split["segments"]))
 
     def test_plan_qdf_records_missing_replacement_glyph_without_literal_replacement(self):
         qdf = f.synthetic_qdf("3807")
@@ -376,6 +417,37 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(match["replacement_cids"], [])
         self.assertNotIn("3807", str(payload))
         self.assertNotIn("ZZZZ", str(payload))
+
+    def test_plan_qdf_records_split_blocker_when_replacement_glyph_missing_in_one_font(self):
+        f5_map = dict(f.DEFAULT_CIDS)
+        del f5_map["4"]
+        qdf = mixed_font_qdf(
+            f.text_object("38", font="F4", x="100", y="10"),
+            f.text_object("07", font="F5", x="140", y="10", cid_map=f5_map),
+            f5_cid_map=f5_map,
+        )
+
+        payload = p.plan_qdf(qdf, "3807", "8304", align="exact")
+
+        split = payload["split_candidates"][0]
+        self.assertEqual(split["split_kind"], "cross_text_object_and_font")
+        self.assertEqual(
+            [(segment["font"], segment["replacement_glyphs_available"]) for segment in split["segments"]],
+            [("F4", True), ("F5", False)],
+        )
+        self.assertEqual(
+            split["blockers"],
+            [
+                {
+                    "font": "F5",
+                    "text_object_index": 2,
+                    "reason": "replacement character(s) not present in active font",
+                    "missing_replacement_glyph_count": 1,
+                }
+            ],
+        )
+        self.assertNotIn("3807", str(payload))
+        self.assertNotIn("8304", str(payload))
 
     def test_plan_exit_status_distinguishes_patchable_missing_and_unpatchable(self):
         patchable = {
