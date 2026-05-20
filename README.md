@@ -337,9 +337,10 @@ from pdf_mutation.reports import bbox_alignment_assertions, report_payload
 
 The historic `pdf_glyph_replace` module remains as a compatibility wrapper.
 The reusable implementation lives under the `pdf_mutation` package boundary.
-Lower-level package modules such as `pdf_mutation.cmap` and
-`pdf_mutation.adapters` are internal implementation seams; prefer
-`pdf_mutation.engine` for integration code.
+Lower-level package modules such as `pdf_mutation.cmap`,
+`pdf_mutation.layout`, and `pdf_mutation.adapters` are internal implementation
+seams; prefer `pdf_mutation.engine` and `pdf_mutation.reports` for integration
+code.
 
 ## Current Scope
 
