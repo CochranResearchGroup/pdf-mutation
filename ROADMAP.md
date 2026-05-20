@@ -1,219 +1,185 @@
 # Roadmap
 
-## Purpose
+## Product Goal
 
-`pdf-mutation` is a deterministic CLI for glyph-preserving PDF text replacement.
-It should mutate encoded PDF text while preserving embedded fonts, glyph CIDs,
-text drawing operators, and layout semantics wherever the PDF structure allows.
+`pdf-mutation` is a deterministic PDF mutation CLI and library for replacing
+encoded PDF text while preserving embedded fonts, glyph CIDs, text drawing
+operators, and layout semantics wherever the PDF structure allows.
 
-## Current State
+The product must answer four questions before it edits a file:
 
-- `pdf_glyph_replace.py` supports exact same-glyph-count replacements.
-- `--align right` supports length-changing replacements for simple
-  right-aligned, one-glyph-per-line amount text objects.
-- `--dry-run` reports decoded matches, active font resources, and replacement
-  feasibility without writing an output PDF.
-- `--audit` inventories every decoded text object and reports mixed-font or
-  cross-object split matches without including full decoded document text.
-- Exact mode supports `<...> Tj`, simple `[...] TJ` arrays, and multiple CIDs
-  inside one hexadecimal string operand.
-- Dry-run reports split matches across text objects or font changes as
-  infeasible instead of patching across layout boundaries.
-- Length-changing replacements support explicit `--align left` and
-  `--align right` contracts for simple one-glyph-per-line text objects, with
-  dry-run x-shift diagnostics.
-- `tests/` contains synthetic QDF fixtures for parser and replacement coverage;
-  the repeatable unit tests do not depend on private PDFs.
-- The tool reads Type0 font `/ToUnicode` CMaps, replaces CID glyph operands,
-  rebuilds via `fix-qdf`, and validates cleanly with `qpdf --check`.
-- Dogfood tooling includes structural inventory reports, policy wrappers,
-  compact JSONL run manifests, summary filters, Markdown summaries, health
-  checks, and direct summary file output for release evidence.
-- Known tested cases:
-  - `3807 -> 8304`
-  - `37.34 -> 138.46 --align right`
+1. Can the target text be found structurally?
+2. Can the replacement be expressed with glyphs already embedded in the PDF?
+3. Can layout semantics be preserved under an explicit alignment contract?
+4. If not, what exact PDF structure blocks the mutation?
 
-## Principles
+The core product is mutation planning and application. Corpus dogfood,
+inventory, and release evidence exist only to validate and explain that product.
 
-- Prefer deterministic structural PDF edits over visual redrawing.
-- Preserve original fonts and glyph encodings; fail clearly when a replacement
-  character is not available in the active font.
-- Keep unsupported text forms explicit instead of guessing.
-- Treat mixed-font and cross-object matches as product signals: report them
-  clearly first, then add mutation support only when the structural contract is
-  deterministic.
-- Validation must include extracted text and PDF structure checks; use bbox
-  checks when layout preservation matters.
-- Treat `work/` as scratch output unless an artifact is deliberately promoted.
+## Current Product Surface
 
-## Milestones
+- `pdf-glyph-replace` mutates Type0 `/ToUnicode` text that is encoded as
+  hexadecimal `<...> Tj` operands or simple `[...] TJ` arrays.
+- Default `--align exact` replaces same decoded glyph counts while preserving
+  existing drawing operators and layout.
+- `--align left` and `--align right` support length-changing replacements only
+  for simple one-glyph-per-line text objects with deterministic `Td` advances.
+- `--dry-run` reports matching text objects, feasibility, active font
+  resources, and alignment diagnostics.
+- `--audit` inventories every decoded text object, reports mixed-font or
+  cross-object split matches, and omits full decoded document text.
+- `--report` writes non-sensitive mutation reports with match locations, font
+  resources, short search/replacement hashes, and validation hints.
+- `pdf-fixture-qdf` provides synthetic QDF fixtures for public tests and repros.
+- `pdf-inventory`, `pdf-dogfood`, and `pdf-dogfood-summary` support corpus
+  validation and release evidence. They are not the main product lane.
 
-### M1 | Harden The Existing CLI
+## Product Principles
 
-Status: CLOSED
+- Prefer deterministic structural PDF edits over overlays, raster edits, OCR, or
+  redrawing.
+- Preserve original fonts and glyph encodings; fail when replacement characters
+  are absent from the active font.
+- Treat mixed-font, split-object, and layout-changing cases as planning facts
+  first. Add mutation support only after the structural contract is explicit.
+- Keep reports non-sensitive by default: object IDs, counts, hashes, and
+  feasibility reasons are acceptable; full decoded document text is not.
+- Require validation that the output is a valid PDF and that extracted text
+  reflects the intended mutation.
 
-Goal: Make the current supported cases reliable enough for routine local use.
+## Forward Milestones
+
+### M7 | Mutation Planner
+
+Status: NEXT
+
+Goal: Make planning a first-class product surface that can be reviewed,
+stored, and applied later.
 
 Scope:
-- Add a small test suite around CMap parsing, exact replacement, and
-  right-aligned amount replacement.
-- Add fixture-generation or fixture-selection notes so tests do not depend on
-  private PDFs.
-- Improve error messages for missing tools, missing CMaps, unsupported glyphs,
-  and unsupported text-object shapes.
-- Add a `--dry-run` mode that reports decoded matches, active font resources,
-  and replacement feasibility without writing an output PDF.
+- Add a stable plan JSON schema for patchable matches.
+- Include input fingerprint, search/replacement hashes, alignment policy,
+  stream object, text object index, font resource, glyph span, and feasibility.
+- Add `--plan PATH` to write the plan without mutating the PDF.
+- Add expected-count fields and reasons for every unpatchable candidate.
+- Keep decoded document text and literal search/replacement strings out of the
+  plan by default.
 
 Acceptance Criteria:
-- `python3 -m py_compile pdf_glyph_replace.py` passes.
-- A repeatable test command exercises exact and right-aligned replacement.
-- Dry-run output is deterministic and does not mutate files.
-- README documents the tested command set.
+- A plan generated from a supported exact replacement can be applied in a later
+  process without re-deciding match boundaries.
+- The plan clearly distinguishes patchable matches, unpatchable same-object
+  matches, and split cross-object or cross-font matches.
+- Unit tests cover exact `Tj`, `TJ`, multi-CID operands, missing glyphs, and
+  mixed-font split candidates.
 
-Completion Notes:
-- Added `python3 -m unittest discover -s tests -v` coverage for CMap parsing,
-  exact CID replacement, right-aligned replacement, and dry-run feasibility.
-- Added `--dry-run` and `--json` reporting.
-- Added `.gitignore` entries for scratch PDFs, QDFs, and Python cache output.
+### M8 | Plan Apply And Match Guards
 
-### M2 | Broaden PDF Text Operator Support
+Status: PLANNED
 
-Status: CLOSED
-
-Goal: Support common encoded text structures beyond one `<...> Tj` sequence.
+Goal: Apply only the reviewed plan and fail closed when the source PDF shape
+changes.
 
 Scope:
-- Support `TJ` arrays containing hex strings and spacing adjustments.
-- Support multiple CIDs inside one hex operand while preserving grouping where
+- Add `--apply-plan PATH`.
+- Add `--expect-count N` for direct CLI use and plan application.
+- Recompute structural fingerprints before writing.
+- Emit a post-apply report linking each changed glyph span to the plan entry.
+- Preserve the current refusal behavior for split cross-object and cross-font
+  matches.
+
+Acceptance Criteria:
+- Applying a stale plan fails before writing an output PDF.
+- Applying a valid plan mutates all and only the planned patchable matches.
+- Post-apply reports include plan ID, changed match count, skipped/unapplied
+  count, and validation hints.
+
+### M9 | Mixed-Font Strategy
+
+Status: PLANNED
+
+Goal: Turn mixed-font documents from vague unsupported cases into explicit,
+deterministic behavior.
+
+Scope:
+- Keep same-object, same-font matches patchable when replacement glyphs exist.
+- Keep cross-font and cross-object matches audit-only unless a segmented
+  replacement contract is designed.
+- Design segmented replacement as a separate plan type before implementation.
+- Add tests for adjacent objects, font switches inside apparent words, and
+  replacement glyphs missing in only one segment.
+
+Acceptance Criteria:
+- The planner explains exactly which font resource blocks each candidate.
+- No cross-font mutation is attempted without an explicit segmented plan.
+- Mixed-font documents remain useful audit inputs even when no mutation is
   possible.
-- Detect and report matches split across multiple text objects or font changes.
-- Preserve conservative failure behavior for structures that cannot be edited
-  safely.
 
-Acceptance Criteria:
-- Exact replacement works for `<...> Tj` and simple `TJ` arrays.
-- Unsupported split-match cases produce actionable diagnostics.
-- Existing M1 smoke cases still pass unchanged.
+### M10 | Layout Evidence
 
-Completion Notes:
-- Added shared hex-string token handling for `<...> Tj`, simple `[...] TJ`
-  arrays, and multi-CID hex operands.
-- Added dry-run diagnostics for matches that appear only when text objects are
-  concatenated.
-- Added unit coverage for `TJ` arrays, multi-CID operands, and split-match
-  infeasibility.
+Status: PLANNED
 
-### M3 | Layout Policies Beyond Right Alignment
-
-Status: CLOSED
-
-Goal: Add explicit, opt-in layout policies for length-changing replacements.
+Goal: Make layout preservation observable, not assumed.
 
 Scope:
-- Keep `--align right` as the default amount-column policy.
-- Add `--align left` only when it can preserve the original text matrix and
-  deterministic glyph advances.
-- Add diagnostics that show old and new bbox estimates when possible.
-- Refuse center or proportional adjustment until there is a reliable structural
-  basis for it.
+- Add optional bbox extraction helpers around Poppler `pdftotext -bbox`.
+- Record before/after bbox evidence for changed text where available.
+- Add right-edge and left-edge assertions for supported alignment contracts.
+- Produce optional HTML or JSON inspection artifacts under `work/`.
 
 Acceptance Criteria:
-- Each length-changing mode has a documented alignment contract.
-- Right-aligned amount replacement still preserves the right edge in bbox
-  extraction.
-- Unsafe length-changing replacement attempts fail with clear guidance.
+- Length-changing replacements can prove their claimed alignment contract.
+- Exact replacements record that text extraction changed while glyph layout
+  operators stayed structurally stable.
+- Missing external layout tools produce clear validation warnings instead of
+  mutation failures.
 
-Completion Notes:
-- Added `--align left`, which preserves the original text matrix and extends
-  text using deterministic glyph advances.
-- Kept `--align right` as the right-edge-preserving policy and added dry-run
-  `estimated_x_shift` diagnostics.
-- Added unit coverage for left alignment, right alignment diagnostics, and
-  alignment contract reporting.
+### M11 | Engine And CLI Boundary
 
-### M4 | Packaging And Release
+Status: PLANNED
 
-Status: CLOSED
-
-Goal: Make the tool easy to install and version without changing its core
-behavior.
+Goal: Split reusable mutation logic from command-line orchestration.
 
 Scope:
-- Add `pyproject.toml` with a console script entrypoint.
-- Define a minimal semantic versioning policy for the CLI.
-- Add dependency checks for `qpdf` and `fix-qdf` to install docs.
-- Keep generated PDFs and QDFs out of source control unless they are explicit
-  fixtures.
+- Move parsing, planning, applying, and reporting into importable modules.
+- Keep `pdf_glyph_replace.py` as a thin CLI wrapper or compatibility shim.
+- Define a stable Python API for plan generation and application.
+- Keep subprocess calls to `qpdf`, `fix-qdf`, and optional Poppler tools behind
+  a narrow adapter.
 
 Acceptance Criteria:
-- The CLI can run through an installed console command.
-- README includes install, smoke, and release instructions.
-- Release notes can describe supported PDF structures and known limits.
+- Unit tests can exercise planner/apply behavior without invoking the CLI.
+- CLI behavior remains backward compatible for current commands.
+- External callers can build a plan and apply it through Python without parsing
+  CLI output.
 
-Completion Notes:
-- Added `pyproject.toml` with package metadata and the
-  `pdf-glyph-replace` console script.
-- Added `pdf_glyph_replace.__version__` and `--version`; current version is
-  `0.1.1`.
-- Documented venv-based editable install, release gate, wheel build, external
-  tool requirements, and semantic versioning.
-- Added ignore rules for package metadata and build outputs.
+### M12 | Product Release Candidate
 
-### M5 | Safety And Review Workflow
+Status: PLANNED
 
-Status: CLOSED
-
-Goal: Make high-confidence PDF mutation review easier before replacing source
-documents.
+Goal: Cut the next release only after the planner/apply product loop is
+coherent.
 
 Scope:
-- Add an optional report file with match count, font resource, object location,
-  and validation hints.
-- Add optional before/after text extraction snippets for each replacement.
-- Consider an output naming convention that avoids overwriting inputs unless an
-  explicit `--in-place` flag is added later.
+- Release after M7 and M8 are complete; include M9-M11 only if they are ready.
+- Release notes describe actual mutation capability, not dogfood refinements.
+- Run source tests, package build, installed CLI smoke, local fixture smoke, and
+  published wheel smoke.
 
 Acceptance Criteria:
-- Operators can inspect what changed without opening the PDF.
-- Reports avoid dumping sensitive full-document text by default.
-- In-place mutation remains unavailable or explicitly guarded.
+- The release has a documented planner/apply workflow.
+- The release has a clear compatibility statement for existing CLI users.
+- Dogfood evidence supports the release but does not define its direction.
 
-Completion Notes:
-- Added `--report` for dry-run and write modes.
-- Reports include match counts, stream object ids, text object ids, font
-  resources, alignment policy, short hashes of search/replacement strings, and
-  validation hints.
-- Reports intentionally omit full decoded text and literal search/replacement
-  strings by default.
-- The CLI still requires an explicit output path for mutation; no in-place mode
-  was added.
+## Supporting Infrastructure Lane
 
-### M6 | Dogfood Reporting And Release Evidence
+The following work is useful, but should not displace mutation-engine progress:
 
-Status: CLOSED
-
-Goal: Make corpus dogfood and release evidence reviewable without committing
-private PDFs or full decoded document text.
-
-Scope:
-- Add structural PDF inventory reports that can classify local dogfood samples.
-- Add policy wrappers for routine, complete, and readiness dogfood runs.
-- Add compact JSONL manifests with non-literal probe metadata.
-- Add manifest summaries suitable for CI notices, runbooks, and release notes.
-
-Acceptance Criteria:
-- Dogfood commands can run against ignored local PDFs under `work/`.
-- Summary output supports table, JSON, Markdown, health, filters, and
-  latest-by-policy views.
-- Summary outputs can be written directly to a file for durable evidence.
-- Synthetic tests and fixtures do not require or expose private PDFs.
-
-Completion Notes:
-- Added `pdf-inventory`, `pdf-dogfood`, and `pdf-dogfood-summary`.
-- Added compact non-sensitive dogfood manifest records and a checked-in
-  synthetic manifest fixture.
-- Added `--markdown` and `--output PATH` to `pdf-dogfood-summary`.
-- CI builds distributions and smokes the installed console entry points.
+- Improve `pdf-inventory` corpus classification when it directly informs M7-M10.
+- Keep `pdf-dogfood` policies current enough to validate supported structures.
+- Keep release evidence concise and tied to actual mutation capabilities.
+- Avoid release cuts for dogfood-only polish unless a real consumer workflow
+  depends on it.
 
 ## Deferred
 
@@ -222,25 +188,91 @@ Completion Notes:
 - Font synthesis or adding glyphs that are absent from the PDF.
 - Reflowing paragraphs or replacing text across arbitrary layout boundaries.
 - Editing encrypted PDFs.
+- In-place mutation without an explicit reviewed plan and backup policy.
 
 ## Validation Baseline
 
-For code changes, run:
+For code changes:
 
 ```bash
-python3 -m py_compile pdf_glyph_replace.py
+python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_dogfood.py pdf_dogfood_summary.py
+python3 -m unittest discover -s tests -v
 ```
 
-For PDF mutation smoke tests, run targeted commands such as:
+For PDF mutation smoke tests when local fixture PDFs are available:
 
 ```bash
-./pdf_glyph_replace.py tmp.before-travel.pdf 3807 8304 -o work/smoke.8304.pdf
+./pdf_glyph_replace.py tmp.before-travel.pdf 3807 8304 --audit --json --report work/audit.json
+./pdf_glyph_replace.py tmp.before-travel.pdf 3807 8304 --dry-run
+./pdf_glyph_replace.py tmp.before-travel.pdf 3807 8304 -o work/smoke.8304.pdf --report work/smoke.8304.report.json
 qpdf --check work/smoke.8304.pdf
 pdftotext work/smoke.8304.pdf - | rg '8304|3807'
 
-./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align right -o work/smoke.amount.pdf
+./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align right --dry-run
+./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align right -o work/smoke.amount.pdf --report work/smoke.amount.report.json
 qpdf --check work/smoke.amount.pdf
 pdftotext work/smoke.amount.pdf - | rg '138\.46|37\.34'
 pdftotext -bbox work/smoke.amount.pdf work/smoke.amount.bbox.html
 rg '138\.46' work/smoke.amount.bbox.html
 ```
+
+## Completed History
+
+### M1 | Harden The Existing CLI
+
+Status: CLOSED
+
+Completed:
+- Added unit coverage for CMap parsing, exact CID replacement, right-aligned
+  replacement, and dry-run feasibility.
+- Added `--dry-run` and JSON reporting.
+- Added scratch-file ignore rules.
+
+### M2 | Broaden PDF Text Operator Support
+
+Status: CLOSED
+
+Completed:
+- Added support for `<...> Tj`, simple `[...] TJ` arrays, and multi-CID hex
+  operands.
+- Added diagnostics for matches split across text objects or font changes.
+- Added tests for `TJ` arrays, multi-CID operands, and split-match refusal.
+
+### M3 | Layout Policies Beyond Right Alignment
+
+Status: CLOSED
+
+Completed:
+- Added `--align left` for simple one-glyph-per-line text objects.
+- Kept `--align right` as the right-edge-preserving policy.
+- Added alignment contract and x-shift diagnostics.
+
+### M4 | Packaging And Release
+
+Status: CLOSED
+
+Completed:
+- Added `pyproject.toml`, package metadata, and console entry points.
+- Added `--version` surfaces and release docs.
+- Added build, install, and release validation guidance.
+
+### M5 | Safety And Review Workflow
+
+Status: CLOSED
+
+Completed:
+- Added `--report` for dry-run and write modes.
+- Reports include match counts, stream object IDs, text object IDs, font
+  resources, alignment policy, short hashes, and validation hints.
+- Full decoded text and literal search/replacement strings are omitted by
+  default.
+
+### M6 | Dogfood Reporting And Release Evidence
+
+Status: CLOSED
+
+Completed:
+- Added `pdf-inventory`, `pdf-dogfood`, and `pdf-dogfood-summary`.
+- Added compact non-sensitive dogfood manifest records and a synthetic fixture.
+- Added Markdown and file-output modes for dogfood summaries.
+- CI builds distributions and smokes installed console entry points.
