@@ -14,7 +14,7 @@ Use this checklist before cutting a package release.
 Run source-level checks:
 
 ```bash
-python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_dogfood.py pdf_dogfood_summary.py
+python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_dogfood.py pdf_dogfood_summary.py pdf_mutation/*.py
 python3 -m unittest discover -s tests -v
 ```
 
@@ -24,6 +24,7 @@ Validate package installation and metadata in an isolated environment:
 python3 -m venv work/release-venv
 work/release-venv/bin/python -m pip install -e .
 work/release-venv/bin/pdf-glyph-replace --version
+work/release-venv/bin/python -c "from pdf_mutation.engine import plan_qdf; print(plan_qdf.__name__)"
 work/release-venv/bin/pdf-fixture-qdf --version
 work/release-venv/bin/pdf-inventory --version
 work/release-venv/bin/pdf-dogfood --version

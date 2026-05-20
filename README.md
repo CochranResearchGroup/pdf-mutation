@@ -312,6 +312,7 @@ python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_d
 python3 -m unittest discover -s tests -v
 python3 -m venv work/release-venv
 work/release-venv/bin/python -m pip install -e .
+work/release-venv/bin/python -c "from pdf_mutation.engine import plan_qdf; print(plan_qdf.__name__)"
 work/release-venv/bin/pdf-glyph-replace --version
 work/release-venv/bin/pdf-fixture-qdf --version
 work/release-venv/bin/pdf-inventory --version
@@ -323,6 +324,19 @@ work/release-venv/bin/python -m pip wheel . -w work/dist
 For behavior-changing releases, also run the local PDF smoke tests above when
 fixture PDFs are available. Release notes should describe newly supported PDF
 text structures and known limits.
+
+## Python API
+
+The compatibility CLI module remains importable as `pdf_glyph_replace`. New
+Python integrations should import through the package boundary:
+
+```python
+from pdf_mutation.engine import apply_plan_to_qdf, plan_qdf, replace_qdf
+from pdf_mutation.reports import bbox_alignment_assertions, report_payload
+```
+
+The package modules currently delegate to the compatibility implementation
+while the internal engine is split into smaller files.
 
 ## Current Scope
 
