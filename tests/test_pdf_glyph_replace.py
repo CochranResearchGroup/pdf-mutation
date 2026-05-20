@@ -148,6 +148,8 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertIn(b"<0032002D002A002E> Tj", edited)
         self.assertIs(engine.plan_qdf, p.plan_qdf)
+        self.assertIn("/pdf_mutation/engine.py", engine.__file__)
+        self.assertNotIn("/pdf_glyph_replace.py", engine.__file__)
 
     def test_importable_report_api_exposes_layout_helpers(self):
         with p.tempfile.TemporaryDirectory() as tmp:
@@ -619,7 +621,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
 
             with (
                 unittest.mock.patch.object(p.shutil, "which", return_value="/usr/bin/pdftotext"),
-                unittest.mock.patch.object(p, "run_status", side_effect=fake_run_status),
+                unittest.mock.patch.object(engine, "run_status", side_effect=fake_run_status),
             ):
                 payload = p.collect_bbox_evidence(
                     input_pdf=input_pdf,

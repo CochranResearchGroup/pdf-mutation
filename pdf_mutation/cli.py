@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from pdf_glyph_replace import main
+from pdf_mutation.engine import main
 
 __all__ = ["main"]

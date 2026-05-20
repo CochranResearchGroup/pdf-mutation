@@ -189,6 +189,8 @@ Progress:
   `adapters`, and `cli` modules.
 - Moved the console script entrypoint to `pdf_mutation.cli:main` while keeping
   `pdf_glyph_replace.py` as the compatibility implementation.
+- Moved the current implementation body into `pdf_mutation.engine` and reduced
+  `pdf_glyph_replace.py` to a compatibility wrapper.
 - Added import-level API tests for engine and reporting helpers.
 
 ### M12 | Product Release Candidate
