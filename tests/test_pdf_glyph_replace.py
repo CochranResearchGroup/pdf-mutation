@@ -52,6 +52,73 @@ end
 """
 
 
+def mixed_font_qdf(*text_objects: bytes) -> bytes:
+    body = b"\nET\nBT\n".join(text_objects)
+    return (
+        b"""1 0 obj
+<<
+  /Resources <<
+    /Font <<
+      /F4 25 0 R
+      /F5 26 0 R
+    >>
+  >>
+>>
+endobj
+25 0 obj
+<<
+  /BaseFont /AAAAAA+SyntheticFixtureA
+  /DescendantFonts [48 0 R]
+  /Encoding /Identity-H
+  /Subtype /Type0
+  /ToUnicode 49 0 R
+  /Type /Font
+>>
+endobj
+26 0 obj
+<<
+  /BaseFont /BBBBBB+SyntheticFixtureB
+  /DescendantFonts [58 0 R]
+  /Encoding /Identity-H
+  /Subtype /Type0
+  /ToUnicode 59 0 R
+  /Type /Font
+>>
+endobj
+49 0 obj
+<<
+  /Length 50 0 R
+>>
+stream
+"""
+        + f.cmap_stream()
+        + b"""endstream
+endobj
+59 0 obj
+<<
+  /Length 60 0 R
+>>
+stream
+"""
+        + f.cmap_stream()
+        + b"""endstream
+endobj
+51 0 obj
+<<
+  /Length 52 0 R
+>>
+stream
+BT
+"""
+        + body
+        + b"""
+ET
+endstream
+endobj
+"""
+    )
+
+
 class PdfGlyphReplaceTests(unittest.TestCase):
     def test_parse_cmap_ignores_codespace_range_and_decodes_ranges(self):
         cmap = p.parse_cmap(CMAP_RANGE_STREAM)
@@ -182,6 +249,68 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(len(reports), 1)
         self.assertFalse(reports[0].feasible)
         self.assertIn("split", reports[0].reason)
+
+    def test_audit_qdf_reports_all_text_objects_and_split_font_match_without_text(self):
+        qdf = mixed_font_qdf(
+            f.text_object("38", font="F4", x="100", y="10"),
+            f.text_object("07", font="F5", x="140", y="10"),
+            f.text_object("9999", font="F5", x="200", y="10"),
+        )
+
+        payload = p.audit_qdf(qdf, "3807", "8304", align="exact")
+
+        self.assertEqual(payload["mode"], "audit")
+        self.assertEqual(payload["total_text_objects"], 3)
+        self.assertEqual(payload["total_matches"], 1)
+        self.assertEqual(payload["patchable_matches"], 0)
+        self.assertEqual(payload["unpatchable_matches"], 1)
+        self.assertEqual(payload["split_match_count"], 1)
+        self.assertEqual(
+            payload["split_matches"][0]["text_object_indexes"],
+            [1, 2],
+        )
+        self.assertEqual(payload["split_matches"][0]["fonts"], ["F4", "F5"])
+        self.assertFalse(payload["split_matches"][0]["patchable"])
+        self.assertEqual([obj["font"] for obj in payload["text_objects"]], ["F4", "F5", "F5"])
+        self.assertEqual([obj["match_count"] for obj in payload["text_objects"]], [0, 0, 0])
+        self.assertFalse(payload["privacy"]["decoded_text_included"])
+        self.assertNotIn("3807", str(payload))
+        self.assertNotIn("8304", str(payload))
+
+    def test_audit_qdf_reports_patchable_mixed_font_object_match(self):
+        qdf = mixed_font_qdf(
+            f.text_object("9999", font="F4", x="100", y="10"),
+            f.text_object("3807", font="F5", x="140", y="10"),
+        )
+
+        payload = p.audit_qdf(qdf, "3807", "8304", align="exact")
+
+        self.assertEqual(payload["total_text_objects"], 2)
+        self.assertEqual(payload["total_matches"], 1)
+        self.assertEqual(payload["patchable_matches"], 1)
+        self.assertEqual(payload["unpatchable_matches"], 0)
+        self.assertEqual(payload["split_match_count"], 0)
+        self.assertEqual(payload["text_objects"][1]["font"], "F5")
+        self.assertTrue(payload["text_objects"][1]["patchable"])
+        self.assertEqual(payload["text_objects"][1]["alignment_contract"], "exact glyph-count replacement preserves existing layout operators")
+
+    def test_audit_exit_status_distinguishes_patchable_missing_and_unpatchable(self):
+        patchable = {
+            "total_matches": 1,
+            "unpatchable_matches": 0,
+        }
+        missing = {
+            "total_matches": 0,
+            "unpatchable_matches": 0,
+        }
+        unpatchable = {
+            "total_matches": 1,
+            "unpatchable_matches": 1,
+        }
+
+        self.assertEqual(p.audit_exit_status(patchable), 0)
+        self.assertEqual(p.audit_exit_status(missing), 1)
+        self.assertEqual(p.audit_exit_status(unpatchable), 2)
 
 
 class PdfFixtureTests(unittest.TestCase):
