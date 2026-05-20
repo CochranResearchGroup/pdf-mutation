@@ -392,6 +392,87 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(p.plan_exit_status(missing), 1)
         self.assertEqual(p.plan_exit_status(unpatchable), 2)
 
+    def test_apply_plan_to_qdf_rewrites_only_planned_exact_match(self):
+        qdf = f.synthetic_qdf("3807")
+        with p.tempfile.TemporaryDirectory() as tmp:
+            input_pdf = p.Path(tmp) / "input.pdf"
+            input_pdf.write_bytes(b"%PDF-fixture\n")
+            plan = p.plan_qdf(qdf, "3807", "8304", align="exact", input_pdf=input_pdf)
+
+            edited, changed_matches, changed_glyphs, applied_ids = p.apply_plan_to_qdf(
+                qdf,
+                plan,
+                input_pdf=input_pdf,
+            )
+
+        self.assertEqual(changed_matches, 1)
+        self.assertEqual(changed_glyphs, 4)
+        self.assertEqual(applied_ids, ["m1"])
+        self.assertIn(b"<0032002D002A002E> Tj", edited)
+        self.assertNotIn(b"<002D0032002A0031> Tj", edited)
+
+    def test_apply_plan_to_qdf_rejects_stale_input_fingerprint(self):
+        qdf = f.synthetic_qdf("3807")
+        with p.tempfile.TemporaryDirectory() as tmp:
+            input_pdf = p.Path(tmp) / "input.pdf"
+            input_pdf.write_bytes(b"%PDF-fixture\n")
+            plan = p.plan_qdf(qdf, "3807", "8304", align="exact", input_pdf=input_pdf)
+            input_pdf.write_bytes(b"%PDF-changed\n")
+
+            with self.assertRaisesRegex(SystemExit, "input PDF fingerprint does not match plan"):
+                p.apply_plan_to_qdf(qdf, plan, input_pdf=input_pdf)
+
+    def test_apply_plan_to_qdf_rejects_stale_qdf_span(self):
+        qdf = f.synthetic_qdf("3807")
+        with p.tempfile.TemporaryDirectory() as tmp:
+            input_pdf = p.Path(tmp) / "input.pdf"
+            input_pdf.write_bytes(b"%PDF-fixture\n")
+            plan = p.plan_qdf(qdf, "3807", "8304", align="exact", input_pdf=input_pdf)
+            plan["matches"][0]["chunk_spans"][0]["old_cid"] = "FFFF"
+
+            with self.assertRaisesRegex(SystemExit, "chunk span does not match"):
+                p.apply_plan_to_qdf(qdf, plan, input_pdf=input_pdf)
+
+    def test_apply_plan_to_qdf_rejects_unpatchable_plan(self):
+        qdf = f.synthetic_qdf("3807")
+        with p.tempfile.TemporaryDirectory() as tmp:
+            input_pdf = p.Path(tmp) / "input.pdf"
+            input_pdf.write_bytes(b"%PDF-fixture\n")
+            plan = p.plan_qdf(qdf, "3807", "ZZZZ", align="exact", input_pdf=input_pdf)
+
+            with self.assertRaisesRegex(SystemExit, "unpatchable candidates"):
+                p.apply_plan_to_qdf(qdf, plan, input_pdf=input_pdf)
+
+    def test_apply_plan_report_payload_omits_literal_text(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            input_pdf = p.Path(tmp) / "input.pdf"
+            output_pdf = p.Path(tmp) / "output.pdf"
+            input_pdf.write_bytes(b"%PDF-fixture\n")
+            plan = p.plan_qdf(
+                f.synthetic_qdf("3807"),
+                "3807",
+                "8304",
+                align="exact",
+                input_pdf=input_pdf,
+            )
+
+            payload = p.apply_plan_report_payload(
+                plan=plan,
+                input_pdf=input_pdf,
+                output_pdf=output_pdf,
+                changed_matches=1,
+                changed_glyphs=4,
+                applied_match_ids=["m1"],
+            )
+
+        self.assertEqual(payload["mode"], "apply-plan")
+        self.assertEqual(payload["plan_id"], plan["plan_id"])
+        self.assertEqual(payload["changed_matches"], 1)
+        self.assertEqual(payload["skipped_unapplied_count"], 0)
+        self.assertFalse(payload["privacy"]["decoded_text_included"])
+        self.assertNotIn("3807", str(payload))
+        self.assertNotIn("8304", str(payload))
+
 
 class PdfFixtureTests(unittest.TestCase):
     def test_synthetic_qdf_decodes_through_replacement_analysis(self):

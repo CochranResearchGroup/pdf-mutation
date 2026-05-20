@@ -53,7 +53,7 @@ inventory, and release evidence exist only to validate and explain that product.
 
 ### M7 | Mutation Planner
 
-Status: IN PROGRESS
+Status: DONE
 
 Goal: Make planning a first-class product surface that can be reviewed,
 stored, and applied later.
@@ -78,10 +78,12 @@ Acceptance Criteria:
 Progress:
 - Added the first `--plan PATH` surface for same-glyph-count patchable matches,
   missing replacement glyphs, and split candidates.
+- Completed the initial plan/apply loop through M8's exact-plan application
+  surface.
 
 ### M8 | Plan Apply And Match Guards
 
-Status: PLANNED
+Status: IN PROGRESS
 
 Goal: Apply only the reviewed plan and fail closed when the source PDF shape
 changes.
@@ -99,6 +101,13 @@ Acceptance Criteria:
 - Applying a valid plan mutates all and only the planned patchable matches.
 - Post-apply reports include plan ID, changed match count, skipped/unapplied
   count, and validation hints.
+
+Progress:
+- Added initial `--apply-plan PATH` support for same-glyph-count patchable
+  plans, with input fingerprint checks, QDF span verification, and
+  non-sensitive post-apply reports.
+- Remaining M8 work: add `--expect-count N` guards for direct writes and plan
+  application.
 
 ### M9 | Mixed-Font Strategy
 

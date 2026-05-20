@@ -88,8 +88,19 @@ To write a reviewable mutation plan without editing the PDF:
 
 Plan JSON is non-sensitive by default. It includes input fingerprint metadata,
 font resources, expected candidate counts, patchable match entries, glyph CID
-spans, replacement CIDs, and split candidates. It does not yet apply the plan;
-plan application is a separate roadmap milestone.
+spans, replacement CIDs, and split candidates.
+
+To apply a reviewed same-glyph-count plan later:
+
+```bash
+./pdf_glyph_replace.py input.pdf --apply-plan work/plan.json -o output.pdf
+./pdf_glyph_replace.py input.pdf --apply-plan work/plan.json -o output.pdf --report work/apply-report.json
+```
+
+Plan application verifies the input PDF fingerprint from the plan and checks
+each planned glyph span against a freshly regenerated QDF before writing the
+output PDF. Stale plans, split candidates, missing replacement glyphs, and
+length-changing plans fail closed.
 
 To write a non-sensitive JSON report:
 
@@ -313,7 +324,9 @@ This first version is intentionally strict by default:
 - `--audit` inventories every decoded text object and reports split mixed-font
   matches without including full decoded document text;
 - `--plan` writes a non-sensitive JSON mutation plan for same-glyph-count
-  patchable matches and split/unpatchable candidates, but does not apply it yet;
+  patchable matches and split/unpatchable candidates;
+- `--apply-plan` applies only reviewed same-glyph-count patchable plan entries
+  after verifying the input fingerprint and planned QDF byte spans;
 - replacement characters must already exist in the active PDF font CMap;
 - matches must fit inside one `BT ... ET` text object;
 - supported exact-mode text drawing forms are hexadecimal `<...> Tj` and simple

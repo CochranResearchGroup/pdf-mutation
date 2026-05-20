@@ -1059,6 +1059,217 @@ def plan_exit_status(payload: dict[str, object]) -> int:
     return 2 if int(expected["unpatchable_candidates"]) else 0
 
 
+def load_json_file(path: Path) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid JSON in plan {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(f"plan {path} must contain a JSON object")
+    return payload
+
+
+def validate_plan_for_apply(plan: dict[str, object], input_pdf: Path) -> list[dict[str, object]]:
+    if plan.get("schema") != "pdf-mutation-plan":
+        raise SystemExit("plan schema is not pdf-mutation-plan")
+    if plan.get("schema_version") != 1:
+        raise SystemExit("unsupported plan schema_version")
+    if plan.get("mode") != "plan":
+        raise SystemExit("plan mode must be 'plan'")
+
+    expected_input = plan.get("input_pdf")
+    if not isinstance(expected_input, dict):
+        raise SystemExit("plan is missing input_pdf fingerprint metadata")
+    actual_input = input_fingerprint(input_pdf)
+    for key in ("size_bytes", "sha256"):
+        if expected_input.get(key) != actual_input[key]:
+            raise SystemExit("input PDF fingerprint does not match plan")
+
+    expected = plan.get("expected")
+    if not isinstance(expected, dict):
+        raise SystemExit("plan is missing expected match counts")
+    if int(expected.get("total_candidates", 0)) == 0:
+        raise SystemExit("plan contains no candidates to apply")
+    if int(expected.get("unpatchable_candidates", 0)) != 0:
+        raise SystemExit("plan contains unpatchable candidates; refusing to apply")
+    if int(expected.get("split_candidates", 0)) != 0:
+        raise SystemExit("plan contains split candidates; refusing to apply")
+
+    if plan.get("search_length") != plan.get("replacement_length"):
+        raise SystemExit("only same-glyph-count plans can be applied")
+
+    matches = plan.get("matches")
+    if not isinstance(matches, list):
+        raise SystemExit("plan matches must be a list")
+    if len(matches) != int(expected.get("patchable_matches", -1)):
+        raise SystemExit("plan patchable match count does not match matches list")
+
+    seen_ids: set[str] = set()
+    for match in matches:
+        if not isinstance(match, dict):
+            raise SystemExit("plan match entries must be objects")
+        match_id = match.get("id")
+        if not isinstance(match_id, str) or not match_id:
+            raise SystemExit("plan match is missing an id")
+        if match_id in seen_ids:
+            raise SystemExit(f"duplicate plan match id: {match_id}")
+        seen_ids.add(match_id)
+        if match.get("kind") != "text_object" or match.get("patchable") is not True:
+            raise SystemExit(f"plan match {match_id} is not patchable text_object")
+        glyph_cids = match.get("glyph_cids")
+        replacement_cids_value = match.get("replacement_cids")
+        spans = match.get("chunk_spans")
+        if not isinstance(glyph_cids, list) or not isinstance(replacement_cids_value, list):
+            raise SystemExit(f"plan match {match_id} is missing glyph CID data")
+        if not isinstance(spans, list) or not spans:
+            raise SystemExit(f"plan match {match_id} is missing chunk spans")
+        if len(glyph_cids) != len(replacement_cids_value) or len(spans) != len(glyph_cids):
+            raise SystemExit(f"plan match {match_id} has inconsistent glyph span counts")
+        for span in spans:
+            if not isinstance(span, dict):
+                raise SystemExit(f"plan match {match_id} has invalid chunk span")
+            for key in ("chunk_start", "chunk_end", "old_cid", "new_cid"):
+                if key not in span:
+                    raise SystemExit(f"plan match {match_id} chunk span is missing {key}")
+    return matches
+
+
+def apply_plan_to_text_object(body: bytes, matches: list[dict[str, object]]) -> tuple[bytes, int, int, list[str]]:
+    if not matches:
+        return body, 0, 0, []
+
+    font_match = FONT_SET_RE.search(body)
+    if not font_match:
+        ids = ", ".join(str(match["id"]) for match in matches)
+        raise SystemExit(f"planned text object is missing active font for match(es): {ids}")
+    font_name = font_match.group(1).decode("ascii")
+
+    replacements: list[tuple[int, int, bytes, bytes, str]] = []
+    applied_ids: list[str] = []
+    for match in matches:
+        match_id = str(match["id"])
+        if match.get("font") != font_name:
+            raise SystemExit(f"plan match {match_id} font does not match regenerated QDF")
+        spans = match["chunk_spans"]
+        if not isinstance(spans, list):
+            raise SystemExit(f"plan match {match_id} has invalid chunk spans")
+        for span in spans:
+            if not isinstance(span, dict):
+                raise SystemExit(f"plan match {match_id} has invalid chunk span")
+            start = int(span["chunk_start"])
+            end = int(span["chunk_end"])
+            old_cid = str(span["old_cid"]).upper().encode("ascii")
+            new_cid = str(span["new_cid"]).upper().encode("ascii")
+            if start < 0 or end <= start or end > len(body):
+                raise SystemExit(f"plan match {match_id} chunk span is outside regenerated text object")
+            if body[start:end].upper() != old_cid:
+                raise SystemExit(f"plan match {match_id} chunk span does not match regenerated QDF")
+            replacements.append((start, end, old_cid, new_cid, match_id))
+        applied_ids.append(match_id)
+
+    last_end = -1
+    for start, end, _old_cid, _new_cid, match_id in sorted(replacements):
+        if start < last_end:
+            raise SystemExit(f"plan match {match_id} overlaps another planned glyph span")
+        last_end = end
+
+    rebuilt = bytearray()
+    pos = 0
+    for start, end, _old_cid, new_cid, _match_id in sorted(replacements):
+        rebuilt.extend(body[pos:start])
+        rebuilt.extend(new_cid)
+        pos = end
+    rebuilt.extend(body[pos:])
+    return bytes(rebuilt), len(applied_ids), len(replacements), applied_ids
+
+
+def apply_plan_to_qdf(qdf: bytes, plan: dict[str, object], *, input_pdf: Path) -> tuple[bytes, int, int, list[str]]:
+    matches = validate_plan_for_apply(plan, input_pdf)
+    planned_by_text_object: dict[int, list[dict[str, object]]] = {}
+    for match in matches:
+        planned_by_text_object.setdefault(int(match["text_object_index"]), []).append(match)
+
+    total_matches = 0
+    total_glyphs = 0
+    applied_ids: list[str] = []
+    text_object_index = 0
+    touched_text_objects: set[int] = set()
+
+    def replace_object(obj_match: re.Match[bytes]) -> bytes:
+        nonlocal text_object_index, total_matches, total_glyphs, applied_ids
+        obj_num = int(obj_match.group(1))
+        body = obj_match.group(2)
+
+        def replace_stream(stream_match: re.Match[bytes]) -> bytes:
+            prefix, stream, suffix = stream_match.groups()
+
+            def replace_text_object(text_match: re.Match[bytes]) -> bytes:
+                nonlocal text_object_index, total_matches, total_glyphs, applied_ids
+                text_object_index += 1
+                planned = planned_by_text_object.get(text_object_index, [])
+                if not planned:
+                    return text_match.group(0)
+                for match in planned:
+                    if match.get("stream_object") != obj_num:
+                        raise SystemExit(
+                            f"plan match {match['id']} stream object does not match regenerated QDF"
+                        )
+                new_body, match_count, glyph_count, ids = apply_plan_to_text_object(
+                    text_match.group(1),
+                    planned,
+                )
+                touched_text_objects.add(text_object_index)
+                total_matches += match_count
+                total_glyphs += glyph_count
+                applied_ids.extend(ids)
+                return b"BT\n" + new_body + b"\nET"
+
+            return prefix + BT_ET_RE.sub(replace_text_object, stream) + suffix
+
+        new_body = STREAM_RE.sub(replace_stream, body)
+        return obj_match.group(1) + b" 0 obj\n" + new_body + b"\nendobj"
+
+    edited = OBJ_RE.sub(replace_object, qdf)
+    missing = sorted(set(planned_by_text_object) - touched_text_objects)
+    if missing:
+        missing_text = ", ".join(str(index) for index in missing)
+        raise SystemExit(f"planned text object(s) not found in regenerated QDF: {missing_text}")
+    if total_matches != len(matches):
+        raise SystemExit("applied match count does not match plan")
+    return edited, total_matches, total_glyphs, applied_ids
+
+
+def apply_plan_report_payload(
+    *,
+    plan: dict[str, object],
+    input_pdf: Path,
+    output_pdf: Path,
+    changed_matches: int,
+    changed_glyphs: int,
+    applied_match_ids: list[str],
+) -> dict[str, object]:
+    return {
+        "version": __version__,
+        "mode": "apply-plan",
+        "plan_id": plan.get("plan_id"),
+        "input_pdf": input_fingerprint(input_pdf),
+        "output_pdf": str(output_pdf),
+        "changed_matches": changed_matches,
+        "changed_glyphs": changed_glyphs,
+        "applied_match_ids": applied_match_ids,
+        "skipped_unapplied_count": 0,
+        "validation_hints": [
+            "qpdf --check <output.pdf>",
+            "pdftotext <output.pdf> - | rg '<expected-or-old-text>'",
+            "pdftotext -bbox <output.pdf> <report>.bbox.html  # when layout preservation matters",
+        ],
+        "privacy": {
+            "decoded_text_included": False,
+            "literal_search_replacement_included": False,
+        },
+    }
+
+
 def print_plan_report(payload: dict[str, object], *, as_json: bool) -> None:
     if as_json:
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -1180,8 +1391,8 @@ def main() -> int:
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("input_pdf", type=Path)
-    parser.add_argument("search")
-    parser.add_argument("replacement")
+    parser.add_argument("search", nargs="?")
+    parser.add_argument("replacement", nargs="?")
     parser.add_argument("-o", "--output", type=Path)
     parser.add_argument(
         "--align",
@@ -1210,10 +1421,27 @@ def main() -> int:
             "implies --dry-run and omits decoded document text"
         ),
     )
+    parser.add_argument(
+        "--apply-plan",
+        type=Path,
+        help="apply a reviewed mutation plan JSON and fail closed if the source PDF no longer matches",
+    )
     parser.add_argument("--json", action="store_true", help="emit dry-run report as JSON")
     parser.add_argument("--keep-qdf", type=Path, help="write the edited QDF for inspection")
     parser.add_argument("--report", type=Path, help="write a non-sensitive JSON mutation report")
     args = parser.parse_args()
+
+    if args.apply_plan:
+        if args.plan or args.audit or args.dry_run:
+            parser.error("--apply-plan cannot be combined with --plan, --audit, or --dry-run")
+        if args.json:
+            parser.error("--json is only supported with --dry-run, --audit, or --plan")
+        if args.search is not None or args.replacement is not None:
+            parser.error("search and replacement are not used with --apply-plan")
+        if not args.output:
+            parser.error("-o/--output is required with --apply-plan")
+    elif args.search is None or args.replacement is None:
+        parser.error("search and replacement are required unless --apply-plan is used")
 
     if args.audit or args.plan:
         args.dry_run = True
@@ -1231,11 +1459,40 @@ def main() -> int:
         fixed_path = Path(tmp) / "fixed.qdf.pdf"
         run(["qpdf", "--qdf", "--object-streams=disable", str(args.input_pdf), str(qdf_path)])
         qdf = qdf_path.read_bytes()
+        if args.apply_plan:
+            plan = load_json_file(args.apply_plan)
+            edited, changed_matches, changed_glyphs, applied_match_ids = apply_plan_to_qdf(
+                qdf,
+                plan,
+                input_pdf=args.input_pdf,
+            )
+            if args.keep_qdf:
+                args.keep_qdf.write_bytes(edited)
+            fixed = run(["fix-qdf"], stdin=edited)
+            fixed_path.write_bytes(fixed)
+            run(["qpdf", str(fixed_path), str(args.output)])
+            if args.report:
+                write_report(
+                    args.report,
+                    apply_plan_report_payload(
+                        plan=plan,
+                        input_pdf=args.input_pdf,
+                        output_pdf=args.output,
+                        changed_matches=changed_matches,
+                        changed_glyphs=changed_glyphs,
+                        applied_match_ids=applied_match_ids,
+                    ),
+                )
+            print(f"applied plan {plan.get('plan_id')}: changed {changed_matches} match(es)")
+            return 0
+
+        search = str(args.search)
+        replacement = str(args.replacement)
         if args.plan:
             payload = plan_qdf(
                 qdf,
-                args.search,
-                args.replacement,
+                search,
+                replacement,
                 align=args.align,
                 input_pdf=args.input_pdf,
             )
@@ -1246,19 +1503,19 @@ def main() -> int:
             return plan_exit_status(payload)
 
         if args.audit:
-            payload = audit_qdf(qdf, args.search, args.replacement, align=args.align)
+            payload = audit_qdf(qdf, search, replacement, align=args.align)
             print_audit_report(payload, as_json=args.json)
             if args.report:
                 write_report(args.report, payload)
             return audit_exit_status(payload)
 
-        reports, decode_maps = analyze_qdf(qdf, args.search, args.replacement, align=args.align)
+        reports, decode_maps = analyze_qdf(qdf, search, replacement, align=args.align)
         if args.dry_run:
             print_dry_run_report(
                 reports,
                 decode_maps,
-                search=args.search,
-                replacement=args.replacement,
+                search=search,
+                replacement=replacement,
                 align=args.align,
                 as_json=args.json,
             )
@@ -1268,8 +1525,8 @@ def main() -> int:
                     report_payload(
                         input_pdf=args.input_pdf,
                         output_pdf=args.output,
-                        search=args.search,
-                        replacement=args.replacement,
+                        search=search,
+                        replacement=replacement,
                         align=args.align,
                         reports=reports,
                         decode_maps=decode_maps,
@@ -1282,9 +1539,9 @@ def main() -> int:
                 return 2
             return 0
 
-        edited, count = replace_qdf(qdf, args.search, args.replacement, align=args.align)
+        edited, count = replace_qdf(qdf, search, replacement, align=args.align)
         if count == 0:
-            raise SystemExit(f"no decoded matches found for {args.search!r}")
+            raise SystemExit(f"no decoded matches found for {search!r}")
         if args.keep_qdf:
             args.keep_qdf.write_bytes(edited)
         fixed = run(["fix-qdf"], stdin=edited)
@@ -1296,8 +1553,8 @@ def main() -> int:
                 report_payload(
                     input_pdf=args.input_pdf,
                     output_pdf=args.output,
-                    search=args.search,
-                    replacement=args.replacement,
+                    search=search,
+                    replacement=replacement,
                     align=args.align,
                     reports=reports,
                     decode_maps=decode_maps,
@@ -1305,7 +1562,7 @@ def main() -> int:
                 ),
             )
 
-    print(f"replaced {count} occurrence(s): {args.search} -> {args.replacement}")
+    print(f"replaced {count} occurrence(s): {search} -> {replacement}")
     return 0
 
 
