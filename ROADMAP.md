@@ -191,6 +191,8 @@ Progress:
   `pdf_glyph_replace.py` as the compatibility implementation.
 - Moved the current implementation body into `pdf_mutation.engine` and reduced
   `pdf_glyph_replace.py` to a compatibility wrapper.
+- Split CMap/object parsing and subprocess helpers into internal package
+  modules while preserving the `pdf_mutation.engine` public exports.
 - Added import-level API tests for engine and reporting helpers.
 
 ### M12 | Product Release Candidate
