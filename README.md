@@ -66,6 +66,19 @@ To check decoded matches and feasibility without writing a PDF:
 ./pdf_glyph_replace.py input.pdf 37.34 138.46 --align left --dry-run --json
 ```
 
+To audit every decoded text object and mixed-font split match before deciding
+whether a mutation is structurally patchable:
+
+```bash
+./pdf_glyph_replace.py input.pdf 3807 8304 --audit
+./pdf_glyph_replace.py input.pdf 3807 8304 --audit --json --report work/audit.json
+```
+
+Audit JSON omits full decoded document text and literal search/replacement
+strings. It records text object indexes, stream objects, font resources,
+decoded lengths, short decoded-text hashes, match counts, patchability, and
+split matches across text objects or font resources.
+
 To write a non-sensitive JSON report:
 
 ```bash
@@ -285,6 +298,8 @@ This first version is intentionally strict by default:
   x-shift for length-changing modes;
 - `--report` writes a non-sensitive JSON report with match locations, font
   resources, and validation hints;
+- `--audit` inventories every decoded text object and reports split mixed-font
+  matches without including full decoded document text;
 - replacement characters must already exist in the active PDF font CMap;
 - matches must fit inside one `BT ... ET` text object;
 - supported exact-mode text drawing forms are hexadecimal `<...> Tj` and simple

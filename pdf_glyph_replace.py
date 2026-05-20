@@ -71,6 +71,33 @@ class TextObjectReport:
     estimated_x_shift: str = ""
 
 
+@dataclasses.dataclass
+class AuditTextObject:
+    text_object_index: int
+    stream_object: int | None
+    font: str
+    decoded_length: int
+    glyph_count: int
+    cmap_glyphs: int
+    decoded_sha256_12: str
+    match_count: int
+    patchable: bool
+    reason: str
+    alignment_contract: str = ""
+    estimated_x_shift: str = ""
+    replacement_missing_chars: list[str] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass
+class AuditSplitMatch:
+    text_object_indexes: list[int]
+    stream_objects: list[int | None]
+    fonts: list[str]
+    match_count: int
+    patchable: bool
+    reason: str
+
+
 def run(args: list[str], *, stdin: bytes | None = None) -> bytes:
     proc = subprocess.run(args, input=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if proc.returncode:
@@ -502,6 +529,156 @@ def alignment_diagnostics(
     return True, "ok", contract, format_decimal(x_shift).decode("ascii")
 
 
+def text_object_feasibility(
+    body: bytes,
+    *,
+    search: str,
+    replacement: str,
+    decoded: str,
+    encode: dict[str, str],
+    align: str,
+) -> tuple[bool, str, str, str, list[str]]:
+    missing = sorted({char for char in replacement if char not in encode})
+    if missing:
+        escaped = ", ".join(repr(char) for char in missing)
+        return False, f"replacement character(s) not present in active font: {escaped}", "", "", missing
+    if len(search) != len(replacement):
+        if align not in {"left", "right"}:
+            return (
+                False,
+                "replacement changes glyph count; use --align left or --align right for supported text",
+                "",
+                "",
+                [],
+            )
+        feasible, reason, contract, x_shift = alignment_diagnostics(
+            body, search, replacement, decoded, align=align
+        )
+        return feasible, reason, contract if feasible else "", x_shift if feasible else "", []
+    return True, "ok", "exact glyph-count replacement preserves existing layout operators", "0", []
+
+
+def audit_qdf(qdf: bytes, search: str, replacement: str, *, align: str) -> dict[str, object]:
+    objects = parse_objects(qdf)
+    decode_maps, encode_maps = build_font_maps(objects)
+    if not decode_maps:
+        raise SystemExit("no Type0 fonts with ToUnicode CMaps found")
+
+    text_objects: list[AuditTextObject] = []
+    decoded_ranges: list[tuple[int, int, AuditTextObject]] = []
+    text_object_index = 0
+    joined_parts: list[str] = []
+    cursor = 0
+
+    for stream_object, object_body in objects.items():
+        stream = stream_of(object_body)
+        if stream is None:
+            continue
+        for text_match in BT_ET_RE.finditer(stream):
+            text_object_index += 1
+            body = text_match.group(1)
+            font_match = FONT_SET_RE.search(body)
+            if not font_match:
+                continue
+            font_name = font_match.group(1).decode("ascii")
+            decode = decode_maps.get(font_name)
+            encode = encode_maps.get(font_name)
+            if not decode or not encode:
+                continue
+
+            glyphs = glyphs_for_text_object(body, decode)
+            decoded = "".join(g.char for g in glyphs)
+            match_count = decoded.count(search)
+            patchable = False
+            reason = "search not present in text object"
+            alignment_contract = ""
+            estimated_x_shift = ""
+            missing_chars: list[str] = []
+            if match_count:
+                patchable, reason, alignment_contract, estimated_x_shift, missing_chars = text_object_feasibility(
+                    body,
+                    search=search,
+                    replacement=replacement,
+                    decoded=decoded,
+                    encode=encode,
+                    align=align,
+                )
+
+            audit_object = AuditTextObject(
+                text_object_index=text_object_index,
+                stream_object=stream_object,
+                font=font_name,
+                decoded_length=len(decoded),
+                glyph_count=len(glyphs),
+                cmap_glyphs=len(decode),
+                decoded_sha256_12=hashlib.sha256(decoded.encode("utf-8")).hexdigest()[:12],
+                match_count=match_count,
+                patchable=patchable,
+                reason=reason,
+                alignment_contract=alignment_contract,
+                estimated_x_shift=estimated_x_shift,
+                replacement_missing_chars=missing_chars,
+            )
+            text_objects.append(audit_object)
+            joined_parts.append(decoded)
+            decoded_ranges.append((cursor, cursor + len(decoded), audit_object))
+            cursor += len(decoded)
+
+    split_matches: list[AuditSplitMatch] = []
+    joined = "".join(joined_parts)
+    start = 0
+    while search:
+        index = joined.find(search, start)
+        if index < 0:
+            break
+        end = index + len(search)
+        overlapped = [
+            audit_object
+            for range_start, range_end, audit_object in decoded_ranges
+            if range_start < end and range_end > index
+        ]
+        if len(overlapped) > 1:
+            split_matches.append(
+                AuditSplitMatch(
+                    text_object_indexes=[obj.text_object_index for obj in overlapped],
+                    stream_objects=[obj.stream_object for obj in overlapped],
+                    fonts=[obj.font for obj in overlapped],
+                    match_count=1,
+                    patchable=False,
+                    reason="match spans multiple text objects or font resources",
+                )
+            )
+        start = index + len(search)
+
+    total_matches = sum(obj.match_count for obj in text_objects) + sum(match.match_count for match in split_matches)
+    patchable_matches = sum(obj.match_count for obj in text_objects if obj.patchable)
+    unpatchable_matches = total_matches - patchable_matches
+    return {
+        "version": __version__,
+        "mode": "audit",
+        "align": align,
+        "search_length": len(search),
+        "replacement_length": len(replacement),
+        "search_sha256_12": hashlib.sha256(search.encode("utf-8")).hexdigest()[:12],
+        "replacement_sha256_12": hashlib.sha256(replacement.encode("utf-8")).hexdigest()[:12],
+        "font_resources": [
+            {"font": font, "decoded_glyphs": len(decode_maps[font])}
+            for font in sorted(decode_maps)
+        ],
+        "total_text_objects": len(text_objects),
+        "total_matches": total_matches,
+        "patchable_matches": patchable_matches,
+        "unpatchable_matches": unpatchable_matches,
+        "split_match_count": sum(match.match_count for match in split_matches),
+        "text_objects": [dataclasses.asdict(obj) for obj in text_objects],
+        "split_matches": [dataclasses.asdict(match) for match in split_matches],
+        "privacy": {
+            "decoded_text_included": False,
+            "literal_search_replacement_included": False,
+        },
+    }
+
+
 def analyze_qdf(
     qdf: bytes, search: str, replacement: str, *, align: str
 ) -> tuple[list[TextObjectReport], dict[str, dict[str, str]]]:
@@ -633,6 +810,52 @@ def print_dry_run_report(
         )
 
 
+def audit_exit_status(payload: dict[str, object]) -> int:
+    total_matches = int(payload["total_matches"])
+    unpatchable_matches = int(payload["unpatchable_matches"])
+    if total_matches == 0:
+        return 1
+    return 2 if unpatchable_matches else 0
+
+
+def print_audit_report(payload: dict[str, object], *, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    print(
+        "audit: "
+        f"search_length={payload['search_length']} "
+        f"replacement_length={payload['replacement_length']} "
+        f"align={payload['align']}"
+    )
+    print("font resources:")
+    for font in payload["font_resources"]:
+        print(f"- /{font['font']}: decoded_glyphs={font['decoded_glyphs']}")
+    print(f"text objects: {payload['total_text_objects']}")
+    print(f"total matches: {payload['total_matches']}")
+    print(f"patchable matches: {payload['patchable_matches']}")
+    print(f"unpatchable matches: {payload['unpatchable_matches']}")
+    if payload["text_objects"]:
+        print("text object audit:")
+    for obj in payload["text_objects"]:
+        print(
+            f"- text_object={obj['text_object_index']} stream={obj['stream_object']} "
+            f"font=/{obj['font']} decoded_length={obj['decoded_length']} "
+            f"glyphs={obj['glyph_count']} matches={obj['match_count']} "
+            f"patchable={'yes' if obj['patchable'] else 'no'} reason={obj['reason']}"
+        )
+    if payload["split_matches"]:
+        print("split matches:")
+    for match in payload["split_matches"]:
+        objects = ",".join(str(index) for index in match["text_object_indexes"])
+        fonts = ",".join(f"/{font}" for font in match["fonts"])
+        print(
+            f"- text_objects={objects} fonts={fonts} "
+            f"patchable=no reason={match['reason']}"
+        )
+
+
 def report_payload(
     *,
     input_pdf: Path,
@@ -712,11 +935,21 @@ def main() -> int:
         ),
     )
     parser.add_argument("--dry-run", action="store_true", help="report decoded matches and feasibility without writing a PDF")
+    parser.add_argument(
+        "--audit",
+        action="store_true",
+        help=(
+            "audit every decoded text object and split match without writing a PDF; "
+            "implies --dry-run and omits decoded document text from JSON"
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="emit dry-run report as JSON")
     parser.add_argument("--keep-qdf", type=Path, help="write the edited QDF for inspection")
     parser.add_argument("--report", type=Path, help="write a non-sensitive JSON mutation report")
     args = parser.parse_args()
 
+    if args.audit:
+        args.dry_run = True
     if not args.dry_run and not args.output:
         parser.error("-o/--output is required unless --dry-run is used")
     if args.json and not args.dry_run:
@@ -731,6 +964,13 @@ def main() -> int:
         fixed_path = Path(tmp) / "fixed.qdf.pdf"
         run(["qpdf", "--qdf", "--object-streams=disable", str(args.input_pdf), str(qdf_path)])
         qdf = qdf_path.read_bytes()
+        if args.audit:
+            payload = audit_qdf(qdf, args.search, args.replacement, align=args.align)
+            print_audit_report(payload, as_json=args.json)
+            if args.report:
+                write_report(args.report, payload)
+            return audit_exit_status(payload)
+
         reports, decode_maps = analyze_qdf(qdf, args.search, args.replacement, align=args.align)
         if args.dry_run:
             print_dry_run_report(

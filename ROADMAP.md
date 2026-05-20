@@ -13,6 +13,8 @@ text drawing operators, and layout semantics wherever the PDF structure allows.
   right-aligned, one-glyph-per-line amount text objects.
 - `--dry-run` reports decoded matches, active font resources, and replacement
   feasibility without writing an output PDF.
+- `--audit` inventories every decoded text object and reports mixed-font or
+  cross-object split matches without including full decoded document text.
 - Exact mode supports `<...> Tj`, simple `[...] TJ` arrays, and multiple CIDs
   inside one hexadecimal string operand.
 - Dry-run reports split matches across text objects or font changes as
@@ -37,6 +39,9 @@ text drawing operators, and layout semantics wherever the PDF structure allows.
 - Preserve original fonts and glyph encodings; fail clearly when a replacement
   character is not available in the active font.
 - Keep unsupported text forms explicit instead of guessing.
+- Treat mixed-font and cross-object matches as product signals: report them
+  clearly first, then add mutation support only when the structural contract is
+  deterministic.
 - Validation must include extracted text and PDF structure checks; use bbox
   checks when layout preservation matters.
 - Treat `work/` as scratch output unless an artifact is deliberately promoted.
