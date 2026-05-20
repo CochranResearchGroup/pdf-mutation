@@ -83,7 +83,7 @@ Progress:
 
 ### M8 | Plan Apply And Match Guards
 
-Status: IN PROGRESS
+Status: DONE
 
 Goal: Apply only the reviewed plan and fail closed when the source PDF shape
 changes.
@@ -106,8 +106,8 @@ Progress:
 - Added initial `--apply-plan PATH` support for same-glyph-count patchable
   plans, with input fingerprint checks, QDF span verification, and
   non-sensitive post-apply reports.
-- Remaining M8 work: add `--expect-count N` guards for direct writes and plan
-  application.
+- Added `--expect-count N` guards for direct writes, dry-runs, audits, plan
+  generation, and plan application.
 
 ### M9 | Mixed-Font Strategy
 

@@ -392,6 +392,18 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(p.plan_exit_status(missing), 1)
         self.assertEqual(p.plan_exit_status(unpatchable), 2)
 
+    def test_expect_count_helper_accepts_matching_count(self):
+        self.assertEqual(p.non_negative_int("2"), 2)
+
+        p.enforce_expect_count(2, 2, label="patchable match(es)")
+        p.enforce_expect_count(None, 5, label="patchable match(es)")
+
+    def test_expect_count_helper_rejects_invalid_or_mismatched_count(self):
+        with self.assertRaises(p.argparse.ArgumentTypeError):
+            p.non_negative_int("-1")
+        with self.assertRaisesRegex(SystemExit, "expected 2 patchable match"):
+            p.enforce_expect_count(2, 1, label="patchable match(es)")
+
     def test_apply_plan_to_qdf_rewrites_only_planned_exact_match(self):
         qdf = f.synthetic_qdf("3807")
         with p.tempfile.TemporaryDirectory() as tmp:
