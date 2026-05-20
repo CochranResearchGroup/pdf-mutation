@@ -12,6 +12,7 @@ import pdf_inventory as inv
 from pdf_mutation import adapters
 from pdf_mutation import cmap as cmap_api
 from pdf_mutation import engine
+from pdf_mutation import layout
 from pdf_mutation import reports as report_api
 
 
@@ -159,6 +160,8 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertIs(engine.build_font_maps, cmap_api.build_font_maps)
         self.assertIs(engine.run_status, adapters.run_status)
         self.assertIs(engine.require_tool, adapters.require_tool)
+        self.assertIs(engine.collect_bbox_evidence, layout.collect_bbox_evidence)
+        self.assertIs(engine.bbox_alignment_assertions, layout.bbox_alignment_assertions)
 
     def test_importable_report_api_exposes_layout_helpers(self):
         with p.tempfile.TemporaryDirectory() as tmp:
@@ -184,6 +187,8 @@ class PdfGlyphReplaceTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "ok")
         self.assertTrue(payload["assertions"][0]["passed"])
+        self.assertIs(report_api.bbox_alignment_assertions, layout.bbox_alignment_assertions)
+        self.assertIs(report_api.collect_bbox_evidence, layout.collect_bbox_evidence)
 
     def test_exact_replacement_rewrites_only_matching_cids(self):
         qdf = f.synthetic_qdf("3807", one_glyph_per_line=True)
@@ -629,8 +634,8 @@ class PdfGlyphReplaceTests(unittest.TestCase):
                 return 0, b"", b""
 
             with (
-                unittest.mock.patch.object(p.shutil, "which", return_value="/usr/bin/pdftotext"),
-                unittest.mock.patch.object(engine, "run_status", side_effect=fake_run_status),
+                unittest.mock.patch.object(layout.shutil, "which", return_value="/usr/bin/pdftotext"),
+                unittest.mock.patch.object(layout, "run_status", side_effect=fake_run_status),
             ):
                 payload = p.collect_bbox_evidence(
                     input_pdf=input_pdf,
@@ -736,7 +741,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
             input_pdf.write_bytes(b"%PDF-before\n")
             output_pdf.write_bytes(b"%PDF-after\n")
 
-            with unittest.mock.patch.object(p.shutil, "which", return_value=None):
+            with unittest.mock.patch.object(layout.shutil, "which", return_value=None):
                 payload = p.collect_bbox_evidence(
                     input_pdf=input_pdf,
                     output_pdf=output_pdf,

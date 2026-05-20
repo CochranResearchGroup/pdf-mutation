@@ -193,6 +193,8 @@ Progress:
   `pdf_glyph_replace.py` to a compatibility wrapper.
 - Split CMap/object parsing and subprocess helpers into internal package
   modules while preserving the `pdf_mutation.engine` public exports.
+- Split bbox layout evidence into an internal `pdf_mutation.layout` module
+  while preserving public reporting imports through `pdf_mutation.reports`.
 - Added import-level API tests for engine and reporting helpers.
 
 ### M12 | Product Release Candidate
