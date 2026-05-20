@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.1.3 | Dogfood Summary Outputs
+
+Maintenance release that improves the dogfood manifest summary surface for
+release notes, runbooks, and operator evidence files.
+
+### Added
+
+- `pdf-dogfood-summary --markdown` for pasteable Markdown tables built from the
+  same non-sensitive manifest summary rows as the TSV output.
+- `pdf-dogfood-summary --output PATH` for writing TSV, JSON, Markdown, or
+  health output directly to a file, creating parent directories when needed.
+
+### Changed
+
+- `pdf-dogfood-summary --json --markdown` now fails clearly instead of choosing
+  one format implicitly.
+- README and the dogfood runbook include direct Markdown file-output examples.
+
+### Compatibility
+
+- No glyph replacement behavior changed.
+- Existing `pdf-dogfood-summary` stdout behavior is unchanged when `--output`
+  is omitted.
+
 ## v0.1.2 | Dogfood Reporting
 
 Maintenance release that adds the public dogfood inventory and manifest
