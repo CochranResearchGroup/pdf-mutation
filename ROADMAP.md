@@ -24,6 +24,9 @@ text drawing operators, and layout semantics wherever the PDF structure allows.
   the repeatable unit tests do not depend on private PDFs.
 - The tool reads Type0 font `/ToUnicode` CMaps, replaces CID glyph operands,
   rebuilds via `fix-qdf`, and validates cleanly with `qpdf --check`.
+- Dogfood tooling includes structural inventory reports, policy wrappers,
+  compact JSONL run manifests, summary filters, Markdown summaries, health
+  checks, and direct summary file output for release evidence.
 - Known tested cases:
   - `3807 -> 8304`
   - `37.34 -> 138.46 --align right`
@@ -179,6 +182,33 @@ Completion Notes:
   strings by default.
 - The CLI still requires an explicit output path for mutation; no in-place mode
   was added.
+
+### M6 | Dogfood Reporting And Release Evidence
+
+Status: CLOSED
+
+Goal: Make corpus dogfood and release evidence reviewable without committing
+private PDFs or full decoded document text.
+
+Scope:
+- Add structural PDF inventory reports that can classify local dogfood samples.
+- Add policy wrappers for routine, complete, and readiness dogfood runs.
+- Add compact JSONL manifests with non-literal probe metadata.
+- Add manifest summaries suitable for CI notices, runbooks, and release notes.
+
+Acceptance Criteria:
+- Dogfood commands can run against ignored local PDFs under `work/`.
+- Summary output supports table, JSON, Markdown, health, filters, and
+  latest-by-policy views.
+- Summary outputs can be written directly to a file for durable evidence.
+- Synthetic tests and fixtures do not require or expose private PDFs.
+
+Completion Notes:
+- Added `pdf-inventory`, `pdf-dogfood`, and `pdf-dogfood-summary`.
+- Added compact non-sensitive dogfood manifest records and a checked-in
+  synthetic manifest fixture.
+- Added `--markdown` and `--output PATH` to `pdf-dogfood-summary`.
+- CI builds distributions and smokes the installed console entry points.
 
 ## Deferred
 
