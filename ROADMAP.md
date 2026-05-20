@@ -140,7 +140,7 @@ Progress:
 
 ### M10 | Layout Evidence
 
-Status: IN PROGRESS
+Status: DONE
 
 Goal: Make layout preservation observable, not assumed.
 
@@ -162,6 +162,8 @@ Progress:
   with `--report`.
 - Reports now record before/after bbox artifact paths, sizes, short hashes, and
   warnings without embedding extracted bbox text.
+- Direct-write reports now summarize exact-mode before/after extraction counts
+  and numeric left/right bbox edge assertions for alignment modes.
 
 ### M11 | Engine And CLI Boundary
 
