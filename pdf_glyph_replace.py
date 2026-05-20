@@ -143,6 +143,11 @@ def run(args: list[str], *, stdin: bytes | None = None) -> bytes:
     return proc.stdout
 
 
+def run_status(args: list[str]) -> tuple[int, bytes, bytes]:
+    proc = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
 def require_tool(name: str) -> None:
     if shutil.which(name) is None:
         raise SystemExit(f"required executable not found on PATH: {name}")
@@ -613,6 +618,15 @@ def input_fingerprint(path: Path) -> dict[str, object]:
         "path": str(path),
         "size_bytes": len(data),
         "sha256": hashlib.sha256(data).hexdigest(),
+    }
+
+
+def artifact_fingerprint(path: Path) -> dict[str, object]:
+    data = path.read_bytes()
+    return {
+        "path": str(path),
+        "size_bytes": len(data),
+        "sha256_12": hashlib.sha256(data).hexdigest()[:12],
     }
 
 
@@ -1374,8 +1388,9 @@ def apply_plan_report_payload(
     changed_matches: int,
     changed_glyphs: int,
     applied_match_ids: list[str],
+    layout_evidence: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "version": __version__,
         "mode": "apply-plan",
         "plan_id": plan.get("plan_id"),
@@ -1393,6 +1408,60 @@ def apply_plan_report_payload(
         "privacy": {
             "decoded_text_included": False,
             "literal_search_replacement_included": False,
+        },
+    }
+    if layout_evidence is not None:
+        payload["layout_evidence"] = layout_evidence
+    return payload
+
+
+def write_bbox_artifact(pdf_path: Path, bbox_path: Path) -> dict[str, object]:
+    bbox_path.parent.mkdir(parents=True, exist_ok=True)
+    if shutil.which("pdftotext") is None:
+        return {
+            "status": "unavailable",
+            "path": str(bbox_path),
+            "reason": "pdftotext not found on PATH",
+        }
+    returncode, _stdout, stderr = run_status(
+        ["pdftotext", "-bbox", str(pdf_path), str(bbox_path)]
+    )
+    if returncode:
+        return {
+            "status": "error",
+            "path": str(bbox_path),
+            "reason": stderr.decode("utf-8", "replace").strip() or "pdftotext -bbox failed",
+        }
+    return {
+        "status": "ok",
+        **artifact_fingerprint(bbox_path),
+    }
+
+
+def collect_bbox_evidence(
+    *,
+    input_pdf: Path,
+    output_pdf: Path,
+    bbox_dir: Path | None,
+    stem: str,
+) -> dict[str, object] | None:
+    if bbox_dir is None:
+        return None
+    before = write_bbox_artifact(input_pdf, bbox_dir / f"{stem}.before.bbox.html")
+    after = write_bbox_artifact(output_pdf, bbox_dir / f"{stem}.after.bbox.html")
+    warnings: list[str] = []
+    for label, artifact in (("before", before), ("after", after)):
+        if artifact["status"] != "ok":
+            warnings.append(f"{label} bbox extraction {artifact['status']}: {artifact['reason']}")
+    return {
+        "tool": "pdftotext -bbox",
+        "status": "ok" if not warnings else "warning",
+        "before": before,
+        "after": after,
+        "warnings": warnings,
+        "privacy": {
+            "bbox_html_may_include_extracted_text": True,
+            "report_includes_bbox_text": False,
         },
     }
 
@@ -1463,10 +1532,11 @@ def report_payload(
     reports: list[TextObjectReport],
     decode_maps: dict[str, dict[str, str]],
     dry_run: bool,
+    layout_evidence: dict[str, object] | None = None,
 ) -> dict[str, object]:
     total = sum(report.match_count for report in reports)
     feasible = total > 0 and all(report.feasible for report in reports)
-    return {
+    payload: dict[str, object] = {
         "version": __version__,
         "mode": "dry-run" if dry_run else "write",
         "input_pdf": str(input_pdf),
@@ -1505,6 +1575,9 @@ def report_payload(
             "literal_search_replacement_included": False,
         },
     }
+    if layout_evidence is not None:
+        payload["layout_evidence"] = layout_evidence
+    return payload
 
 
 def write_report(path: Path, payload: dict[str, object]) -> None:
@@ -1561,6 +1634,14 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="emit dry-run report as JSON")
     parser.add_argument("--keep-qdf", type=Path, help="write the edited QDF for inspection")
     parser.add_argument("--report", type=Path, help="write a non-sensitive JSON mutation report")
+    parser.add_argument(
+        "--bbox-dir",
+        type=Path,
+        help=(
+            "write optional before/after pdftotext -bbox HTML artifacts under PATH "
+            "and reference them from --report"
+        ),
+    )
     args = parser.parse_args()
 
     if args.apply_plan:
@@ -1581,6 +1662,8 @@ def main() -> int:
         parser.error("-o/--output is required unless --dry-run is used")
     if args.json and not args.dry_run:
         parser.error("--json is only supported with --dry-run")
+    if args.bbox_dir and (args.dry_run or not args.report):
+        parser.error("--bbox-dir is only supported for write/apply modes with --report")
 
     require_tool("qpdf")
     if not args.dry_run:
@@ -1604,6 +1687,12 @@ def main() -> int:
             fixed = run(["fix-qdf"], stdin=edited)
             fixed_path.write_bytes(fixed)
             run(["qpdf", str(fixed_path), str(args.output)])
+            layout_evidence = collect_bbox_evidence(
+                input_pdf=args.input_pdf,
+                output_pdf=args.output,
+                bbox_dir=args.bbox_dir,
+                stem=args.output.stem,
+            )
             if args.report:
                 write_report(
                     args.report,
@@ -1614,6 +1703,7 @@ def main() -> int:
                         changed_matches=changed_matches,
                         changed_glyphs=changed_glyphs,
                         applied_match_ids=applied_match_ids,
+                        layout_evidence=layout_evidence,
                     ),
                 )
             print(f"applied plan {plan.get('plan_id')}: changed {changed_matches} match(es)")
@@ -1699,6 +1789,12 @@ def main() -> int:
         fixed = run(["fix-qdf"], stdin=edited)
         fixed_path.write_bytes(fixed)
         run(["qpdf", str(fixed_path), str(args.output)])
+        layout_evidence = collect_bbox_evidence(
+            input_pdf=args.input_pdf,
+            output_pdf=args.output,
+            bbox_dir=args.bbox_dir,
+            stem=args.output.stem,
+        )
         if args.report:
             write_report(
                 args.report,
@@ -1710,6 +1806,7 @@ def main() -> int:
                     align=args.align,
                     reports=reports,
                     decode_maps=decode_maps,
+                    layout_evidence=layout_evidence,
                     dry_run=False,
                 ),
             )

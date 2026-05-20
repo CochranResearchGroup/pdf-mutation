@@ -115,11 +115,18 @@ To write a non-sensitive JSON report:
 
 ```bash
 ./pdf_glyph_replace.py input.pdf 3807 8304 -o output.pdf --report work/report.json
+./pdf_glyph_replace.py input.pdf 37.34 138.46 --align right -o output.pdf --report work/report.json --bbox-dir work/bbox
 ```
 
 The report records match counts, font resources, stream object ids, text object
 ids, alignment policy, and validation hints. It does not include full decoded
 text or literal search/replacement strings by default.
+
+Use `--bbox-dir PATH` with write/apply modes and `--report` to generate
+optional before/after `pdftotext -bbox` HTML artifacts. The JSON report records
+artifact paths, sizes, short hashes, and warnings, but not extracted bbox text.
+If `pdftotext` is missing or bbox extraction fails, mutation still succeeds and
+the report records a layout-evidence warning.
 
 ## Synthetic Fixtures
 
@@ -330,6 +337,8 @@ This first version is intentionally strict by default:
   x-shift for length-changing modes;
 - `--report` writes a non-sensitive JSON report with match locations, font
   resources, and validation hints;
+- `--bbox-dir` writes optional before/after bbox HTML artifacts and records
+  non-sensitive artifact metadata in the report;
 - `--audit` inventories every decoded text object and reports split mixed-font
   matches without including full decoded document text;
 - `--plan` writes a non-sensitive JSON mutation plan for same-glyph-count
