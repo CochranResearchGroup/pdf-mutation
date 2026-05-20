@@ -9,6 +9,8 @@ import pdf_dogfood_summary as ds
 import pdf_fixture as f
 import pdf_glyph_replace as p
 import pdf_inventory as inv
+from pdf_mutation import adapters
+from pdf_mutation import cmap as cmap_api
 from pdf_mutation import engine
 from pdf_mutation import reports as report_api
 
@@ -150,6 +152,13 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertIs(engine.plan_qdf, p.plan_qdf)
         self.assertIn("/pdf_mutation/engine.py", engine.__file__)
         self.assertNotIn("/pdf_glyph_replace.py", engine.__file__)
+
+    def test_internal_modules_own_cmap_and_adapter_helpers(self):
+        self.assertIs(engine.parse_cmap, cmap_api.parse_cmap)
+        self.assertIs(engine.parse_objects, cmap_api.parse_objects)
+        self.assertIs(engine.build_font_maps, cmap_api.build_font_maps)
+        self.assertIs(engine.run_status, adapters.run_status)
+        self.assertIs(engine.require_tool, adapters.require_tool)
 
     def test_importable_report_api_exposes_layout_helpers(self):
         with p.tempfile.TemporaryDirectory() as tmp:
