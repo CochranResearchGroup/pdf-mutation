@@ -140,7 +140,7 @@ Progress:
 
 ### M10 | Layout Evidence
 
-Status: PLANNED
+Status: IN PROGRESS
 
 Goal: Make layout preservation observable, not assumed.
 
@@ -156,6 +156,12 @@ Acceptance Criteria:
   operators stayed structurally stable.
 - Missing external layout tools produce clear validation warnings instead of
   mutation failures.
+
+Progress:
+- Added optional `--bbox-dir PATH` evidence generation for write/apply modes
+  with `--report`.
+- Reports now record before/after bbox artifact paths, sizes, short hashes, and
+  warnings without embedding extracted bbox text.
 
 ### M11 | Engine And CLI Boundary
 

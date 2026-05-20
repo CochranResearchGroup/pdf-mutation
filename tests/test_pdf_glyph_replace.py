@@ -216,6 +216,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
             reports=reports,
             decode_maps=decode_maps,
             dry_run=False,
+            layout_evidence={"status": "ok"},
         )
 
         self.assertEqual(payload["total_matches"], 1)
@@ -223,6 +224,7 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertFalse(payload["privacy"]["literal_search_replacement_included"])
         self.assertNotIn("decoded_text", payload["matches"][0])
         self.assertEqual(payload["matches"][0]["stream_object"], 51)
+        self.assertEqual(payload["layout_evidence"], {"status": "ok"})
 
     def test_analyze_qdf_reports_left_alignment_contract(self):
         qdf = f.synthetic_qdf("$37.34", one_glyph_per_line=True, x="653.375", y="1370")
@@ -547,15 +549,70 @@ class PdfGlyphReplaceTests(unittest.TestCase):
                 changed_matches=1,
                 changed_glyphs=4,
                 applied_match_ids=["m1"],
+                layout_evidence={"status": "ok"},
             )
 
         self.assertEqual(payload["mode"], "apply-plan")
         self.assertEqual(payload["plan_id"], plan["plan_id"])
         self.assertEqual(payload["changed_matches"], 1)
         self.assertEqual(payload["skipped_unapplied_count"], 0)
+        self.assertEqual(payload["layout_evidence"], {"status": "ok"})
         self.assertFalse(payload["privacy"]["decoded_text_included"])
         self.assertNotIn("3807", str(payload))
         self.assertNotIn("8304", str(payload))
+
+    def test_collect_bbox_evidence_records_artifact_hashes_without_report_text(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            root = p.Path(tmp)
+            input_pdf = root / "input.pdf"
+            output_pdf = root / "output.pdf"
+            bbox_dir = root / "bbox"
+            input_pdf.write_bytes(b"%PDF-before\n")
+            output_pdf.write_bytes(b"%PDF-after\n")
+
+            def fake_run_status(args):
+                p.Path(args[-1]).write_text("<html>bbox text</html>\n", encoding="utf-8")
+                return 0, b"", b""
+
+            with (
+                unittest.mock.patch.object(p.shutil, "which", return_value="/usr/bin/pdftotext"),
+                unittest.mock.patch.object(p, "run_status", side_effect=fake_run_status),
+            ):
+                payload = p.collect_bbox_evidence(
+                    input_pdf=input_pdf,
+                    output_pdf=output_pdf,
+                    bbox_dir=bbox_dir,
+                    stem="output",
+                )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["before"]["status"], "ok")
+        self.assertEqual(payload["after"]["status"], "ok")
+        self.assertIn("sha256_12", payload["before"])
+        self.assertFalse(payload["privacy"]["report_includes_bbox_text"])
+        self.assertTrue(payload["privacy"]["bbox_html_may_include_extracted_text"])
+        self.assertNotIn("bbox text", str(payload))
+
+    def test_collect_bbox_evidence_warns_when_pdftotext_is_missing(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            root = p.Path(tmp)
+            input_pdf = root / "input.pdf"
+            output_pdf = root / "output.pdf"
+            input_pdf.write_bytes(b"%PDF-before\n")
+            output_pdf.write_bytes(b"%PDF-after\n")
+
+            with unittest.mock.patch.object(p.shutil, "which", return_value=None):
+                payload = p.collect_bbox_evidence(
+                    input_pdf=input_pdf,
+                    output_pdf=output_pdf,
+                    bbox_dir=root / "bbox",
+                    stem="output",
+                )
+
+        self.assertEqual(payload["status"], "warning")
+        self.assertEqual(payload["before"]["status"], "unavailable")
+        self.assertEqual(payload["after"]["status"], "unavailable")
+        self.assertEqual(len(payload["warnings"]), 2)
 
 
 class PdfFixtureTests(unittest.TestCase):
