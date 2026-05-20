@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pdf_glyph_replace import (
+from pdf_mutation.engine import (
     apply_plan_report_payload,
     bbox_alignment_assertions,
     collect_bbox_evidence,

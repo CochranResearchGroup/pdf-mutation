@@ -335,8 +335,8 @@ from pdf_mutation.engine import apply_plan_to_qdf, plan_qdf, replace_qdf
 from pdf_mutation.reports import bbox_alignment_assertions, report_payload
 ```
 
-The package modules currently delegate to the compatibility implementation
-while the internal engine is split into smaller files.
+The historic `pdf_glyph_replace` module remains as a compatibility wrapper.
+The reusable implementation lives under the `pdf_mutation` package boundary.
 
 ## Current Scope
 
