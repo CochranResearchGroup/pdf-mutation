@@ -28,6 +28,8 @@ inventory, and release evidence exist only to validate and explain that product.
   resources, and alignment diagnostics.
 - `--audit` inventories every decoded text object, reports mixed-font or
   cross-object split matches, and omits full decoded document text.
+- `--plan` writes a reviewable JSON mutation plan for same-glyph-count
+  patchable matches and unpatchable candidates without applying it.
 - `--report` writes non-sensitive mutation reports with match locations, font
   resources, short search/replacement hashes, and validation hints.
 - `pdf-fixture-qdf` provides synthetic QDF fixtures for public tests and repros.
@@ -51,7 +53,7 @@ inventory, and release evidence exist only to validate and explain that product.
 
 ### M7 | Mutation Planner
 
-Status: NEXT
+Status: IN PROGRESS
 
 Goal: Make planning a first-class product surface that can be reviewed,
 stored, and applied later.
@@ -72,6 +74,10 @@ Acceptance Criteria:
   matches, and split cross-object or cross-font matches.
 - Unit tests cover exact `Tj`, `TJ`, multi-CID operands, missing glyphs, and
   mixed-font split candidates.
+
+Progress:
+- Added the first `--plan PATH` surface for same-glyph-count patchable matches,
+  missing replacement glyphs, and split candidates.
 
 ### M8 | Plan Apply And Match Guards
 

@@ -312,6 +312,86 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(p.audit_exit_status(missing), 1)
         self.assertEqual(p.audit_exit_status(unpatchable), 2)
 
+    def test_plan_qdf_records_patchable_exact_match_without_literal_text(self):
+        qdf = f.synthetic_qdf("3807")
+
+        payload = p.plan_qdf(qdf, "3807", "8304", align="exact")
+
+        self.assertEqual(payload["schema"], "pdf-mutation-plan")
+        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["mode"], "plan")
+        self.assertEqual(payload["expected"]["total_candidates"], 1)
+        self.assertEqual(payload["expected"]["patchable_matches"], 1)
+        self.assertEqual(payload["expected"]["unpatchable_candidates"], 0)
+        self.assertEqual(payload["expected"]["split_candidates"], 0)
+        self.assertRegex(payload["plan_id"], r"^[0-9a-f]{16}$")
+        self.assertFalse(payload["privacy"]["decoded_text_included"])
+        self.assertFalse(payload["privacy"]["literal_search_replacement_included"])
+        self.assertNotIn("3807", str(payload))
+        self.assertNotIn("8304", str(payload))
+
+        match = payload["matches"][0]
+        self.assertEqual(match["id"], "m1")
+        self.assertEqual(match["kind"], "text_object")
+        self.assertTrue(match["patchable"])
+        self.assertEqual(match["stream_object"], 51)
+        self.assertEqual(match["font"], "F4")
+        self.assertEqual(match["glyph_start"], 0)
+        self.assertEqual(match["glyph_end"], 4)
+        self.assertEqual(match["glyph_cids"], ["002D", "0032", "002A", "0031"])
+        self.assertEqual(match["replacement_cids"], ["0032", "002D", "002A", "002E"])
+        self.assertEqual(len(match["chunk_spans"]), 4)
+        self.assertEqual(match["chunk_spans"][0]["old_cid"], "002D")
+        self.assertEqual(match["chunk_spans"][0]["new_cid"], "0032")
+
+    def test_plan_qdf_records_split_candidate_as_unpatchable(self):
+        qdf = mixed_font_qdf(
+            f.text_object("38", font="F4", x="100", y="10"),
+            f.text_object("07", font="F5", x="140", y="10"),
+        )
+
+        payload = p.plan_qdf(qdf, "3807", "8304", align="exact")
+
+        self.assertEqual(payload["expected"]["total_candidates"], 1)
+        self.assertEqual(payload["expected"]["patchable_matches"], 0)
+        self.assertEqual(payload["expected"]["unpatchable_candidates"], 1)
+        self.assertEqual(payload["expected"]["split_candidates"], 1)
+        self.assertEqual(payload["matches"], [])
+        self.assertEqual(payload["split_candidates"][0]["id"], "s1")
+        self.assertEqual(payload["split_candidates"][0]["text_object_indexes"], [1, 2])
+        self.assertEqual(payload["split_candidates"][0]["fonts"], ["F4", "F5"])
+        self.assertFalse(payload["split_candidates"][0]["patchable"])
+
+    def test_plan_qdf_records_missing_replacement_glyph_without_literal_replacement(self):
+        qdf = f.synthetic_qdf("3807")
+
+        payload = p.plan_qdf(qdf, "3807", "ZZZZ", align="exact")
+
+        self.assertEqual(payload["expected"]["total_candidates"], 1)
+        self.assertEqual(payload["expected"]["patchable_matches"], 0)
+        self.assertEqual(payload["expected"]["unpatchable_candidates"], 1)
+        match = payload["matches"][0]
+        self.assertFalse(match["patchable"])
+        self.assertEqual(match["reason"], "replacement character(s) not present in active font")
+        self.assertEqual(match["replacement_cids"], [])
+        self.assertNotIn("3807", str(payload))
+        self.assertNotIn("ZZZZ", str(payload))
+
+    def test_plan_exit_status_distinguishes_patchable_missing_and_unpatchable(self):
+        patchable = {
+            "expected": {"total_candidates": 1, "unpatchable_candidates": 0},
+        }
+        missing = {
+            "expected": {"total_candidates": 0, "unpatchable_candidates": 0},
+        }
+        unpatchable = {
+            "expected": {"total_candidates": 1, "unpatchable_candidates": 1},
+        }
+
+        self.assertEqual(p.plan_exit_status(patchable), 0)
+        self.assertEqual(p.plan_exit_status(missing), 1)
+        self.assertEqual(p.plan_exit_status(unpatchable), 2)
+
 
 class PdfFixtureTests(unittest.TestCase):
     def test_synthetic_qdf_decodes_through_replacement_analysis(self):

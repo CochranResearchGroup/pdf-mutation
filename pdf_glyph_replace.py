@@ -98,6 +98,37 @@ class AuditSplitMatch:
     reason: str
 
 
+@dataclasses.dataclass
+class PlanMatch:
+    id: str
+    kind: str
+    patchable: bool
+    reason: str
+    text_object_index: int
+    stream_object: int | None
+    font: str
+    match_index: int
+    glyph_start: int
+    glyph_end: int
+    glyph_cids: list[str]
+    replacement_cids: list[str]
+    chunk_spans: list[dict[str, object]]
+    alignment_contract: str = ""
+    estimated_x_shift: str = ""
+
+
+@dataclasses.dataclass
+class PlanSplitCandidate:
+    id: str
+    kind: str
+    patchable: bool
+    reason: str
+    text_object_indexes: list[int]
+    stream_objects: list[int | None]
+    fonts: list[str]
+    match_index: int
+
+
 def run(args: list[str], *, stdin: bytes | None = None) -> bytes:
     proc = subprocess.run(args, input=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if proc.returncode:
@@ -558,6 +589,207 @@ def text_object_feasibility(
     return True, "ok", "exact glyph-count replacement preserves existing layout operators", "0", []
 
 
+def find_occurrences(decoded: str, search: str) -> list[int]:
+    positions: list[int] = []
+    start = 0
+    while search:
+        index = decoded.find(search, start)
+        if index < 0:
+            break
+        positions.append(index)
+        start = index + len(search)
+    return positions
+
+
+def input_fingerprint(path: Path) -> dict[str, object]:
+    data = path.read_bytes()
+    return {
+        "path": str(path),
+        "size_bytes": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+    }
+
+
+def plan_id_for(payload: dict[str, object]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:16]
+
+
+def replacement_cids_or_empty(replacement: str, encode: dict[str, str]) -> list[str]:
+    if any(char not in encode for char in replacement):
+        return []
+    return [encode[char] for char in replacement]
+
+
+def chunk_spans_for_match(glyphs: list[Glyph], start: int, replacement_codes: list[str]) -> list[dict[str, object]]:
+    spans: list[dict[str, object]] = []
+    for offset, new_cid in enumerate(replacement_codes):
+        glyph = glyphs[start + offset]
+        spans.append(
+            {
+                "glyph_index": start + offset,
+                "chunk_start": glyph.chunk_start,
+                "chunk_end": glyph.chunk_end,
+                "old_cid": glyph.cid,
+                "new_cid": new_cid,
+            }
+        )
+    return spans
+
+
+def plan_qdf(
+    qdf: bytes,
+    search: str,
+    replacement: str,
+    *,
+    align: str,
+    input_pdf: Path | None = None,
+) -> dict[str, object]:
+    objects = parse_objects(qdf)
+    decode_maps, encode_maps = build_font_maps(objects)
+    if not decode_maps:
+        raise SystemExit("no Type0 fonts with ToUnicode CMaps found")
+
+    matches: list[PlanMatch] = []
+    split_candidates: list[PlanSplitCandidate] = []
+    decoded_ranges: list[tuple[int, int, dict[str, object]]] = []
+    joined_parts: list[str] = []
+    text_object_index = 0
+    cursor = 0
+
+    for stream_object, object_body in objects.items():
+        stream = stream_of(object_body)
+        if stream is None:
+            continue
+        for text_match in BT_ET_RE.finditer(stream):
+            text_object_index += 1
+            body = text_match.group(1)
+            font_match = FONT_SET_RE.search(body)
+            if not font_match:
+                continue
+            font_name = font_match.group(1).decode("ascii")
+            decode = decode_maps.get(font_name)
+            encode = encode_maps.get(font_name)
+            if not decode or not encode:
+                continue
+
+            glyphs = glyphs_for_text_object(body, decode)
+            decoded = "".join(g.char for g in glyphs)
+            joined_parts.append(decoded)
+            decoded_ranges.append(
+                (
+                    cursor,
+                    cursor + len(decoded),
+                    {
+                        "text_object_index": text_object_index,
+                        "stream_object": stream_object,
+                        "font": font_name,
+                    },
+                )
+            )
+            cursor += len(decoded)
+
+            replacement_codes = replacement_cids_or_empty(replacement, encode)
+            for match_index, start in enumerate(find_occurrences(decoded, search), 1):
+                feasible, reason, contract, x_shift, _missing = text_object_feasibility(
+                    body,
+                    search=search,
+                    replacement=replacement,
+                    decoded=decoded,
+                    encode=encode,
+                    align=align,
+                )
+                if not replacement_codes and "replacement character" in reason:
+                    reason = "replacement character(s) not present in active font"
+                same_glyph_count = len(search) == len(replacement)
+                patchable = feasible and same_glyph_count and bool(replacement_codes)
+                if feasible and not same_glyph_count:
+                    reason = "length-changing matches require a later plan schema before plan apply"
+                    patchable = False
+                    contract = ""
+                    x_shift = ""
+                glyph_end = start + len(search)
+                spans = (
+                    chunk_spans_for_match(glyphs, start, replacement_codes)
+                    if patchable
+                    else []
+                )
+                matches.append(
+                    PlanMatch(
+                        id=f"m{len(matches) + 1}",
+                        kind="text_object",
+                        patchable=patchable,
+                        reason=reason,
+                        text_object_index=text_object_index,
+                        stream_object=stream_object,
+                        font=font_name,
+                        match_index=match_index,
+                        glyph_start=start,
+                        glyph_end=glyph_end,
+                        glyph_cids=[glyph.cid for glyph in glyphs[start:glyph_end]],
+                        replacement_cids=replacement_codes if patchable else [],
+                        chunk_spans=spans,
+                        alignment_contract=contract if patchable else "",
+                        estimated_x_shift=x_shift if patchable else "",
+                    )
+                )
+
+    joined = "".join(joined_parts)
+    for match_index, start in enumerate(find_occurrences(joined, search), 1):
+        end = start + len(search)
+        overlapped = [
+            meta
+            for range_start, range_end, meta in decoded_ranges
+            if range_start < end and range_end > start
+        ]
+        if len(overlapped) > 1:
+            split_candidates.append(
+                PlanSplitCandidate(
+                    id=f"s{len(split_candidates) + 1}",
+                    kind="split",
+                    patchable=False,
+                    reason="match spans multiple text objects or font resources",
+                    text_object_indexes=[int(meta["text_object_index"]) for meta in overlapped],
+                    stream_objects=[meta["stream_object"] for meta in overlapped],
+                    fonts=[str(meta["font"]) for meta in overlapped],
+                    match_index=match_index,
+                )
+            )
+
+    patchable_matches = sum(1 for match in matches if match.patchable)
+    unpatchable_matches = sum(1 for match in matches if not match.patchable) + len(split_candidates)
+    payload: dict[str, object] = {
+        "schema": "pdf-mutation-plan",
+        "schema_version": 1,
+        "version": __version__,
+        "mode": "plan",
+        "input_pdf": input_fingerprint(input_pdf) if input_pdf else None,
+        "align": align,
+        "search_length": len(search),
+        "replacement_length": len(replacement),
+        "search_sha256_12": hashlib.sha256(search.encode("utf-8")).hexdigest()[:12],
+        "replacement_sha256_12": hashlib.sha256(replacement.encode("utf-8")).hexdigest()[:12],
+        "font_resources": [
+            {"font": font, "decoded_glyphs": len(decode_maps[font])}
+            for font in sorted(decode_maps)
+        ],
+        "expected": {
+            "total_candidates": len(matches) + len(split_candidates),
+            "patchable_matches": patchable_matches,
+            "unpatchable_candidates": unpatchable_matches,
+            "split_candidates": len(split_candidates),
+        },
+        "matches": [dataclasses.asdict(match) for match in matches],
+        "split_candidates": [dataclasses.asdict(candidate) for candidate in split_candidates],
+        "privacy": {
+            "decoded_text_included": False,
+            "literal_search_replacement_included": False,
+        },
+    }
+    payload["plan_id"] = plan_id_for(payload)
+    return payload
+
+
 def audit_qdf(qdf: bytes, search: str, replacement: str, *, align: str) -> dict[str, object]:
     objects = parse_objects(qdf)
     decode_maps, encode_maps = build_font_maps(objects)
@@ -818,6 +1050,33 @@ def audit_exit_status(payload: dict[str, object]) -> int:
     return 2 if unpatchable_matches else 0
 
 
+def plan_exit_status(payload: dict[str, object]) -> int:
+    expected = payload["expected"]
+    if not isinstance(expected, dict):
+        return 2
+    if int(expected["total_candidates"]) == 0:
+        return 1
+    return 2 if int(expected["unpatchable_candidates"]) else 0
+
+
+def print_plan_report(payload: dict[str, object], *, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    expected = payload["expected"]
+    if not isinstance(expected, dict):
+        raise SystemExit("internal error: invalid plan summary")
+    print(
+        "plan: "
+        f"id={payload['plan_id']} "
+        f"align={payload['align']} "
+        f"candidates={expected['total_candidates']} "
+        f"patchable={expected['patchable_matches']} "
+        f"unpatchable={expected['unpatchable_candidates']} "
+        f"split={expected['split_candidates']}"
+    )
+
+
 def print_audit_report(payload: dict[str, object], *, as_json: bool) -> None:
     if as_json:
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -943,12 +1202,20 @@ def main() -> int:
             "implies --dry-run and omits decoded document text from JSON"
         ),
     )
+    parser.add_argument(
+        "--plan",
+        type=Path,
+        help=(
+            "write a reviewable mutation plan JSON without writing a PDF; "
+            "implies --dry-run and omits decoded document text"
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="emit dry-run report as JSON")
     parser.add_argument("--keep-qdf", type=Path, help="write the edited QDF for inspection")
     parser.add_argument("--report", type=Path, help="write a non-sensitive JSON mutation report")
     args = parser.parse_args()
 
-    if args.audit:
+    if args.audit or args.plan:
         args.dry_run = True
     if not args.dry_run and not args.output:
         parser.error("-o/--output is required unless --dry-run is used")
@@ -964,6 +1231,20 @@ def main() -> int:
         fixed_path = Path(tmp) / "fixed.qdf.pdf"
         run(["qpdf", "--qdf", "--object-streams=disable", str(args.input_pdf), str(qdf_path)])
         qdf = qdf_path.read_bytes()
+        if args.plan:
+            payload = plan_qdf(
+                qdf,
+                args.search,
+                args.replacement,
+                align=args.align,
+                input_pdf=args.input_pdf,
+            )
+            write_report(args.plan, payload)
+            print_plan_report(payload, as_json=args.json)
+            if args.report:
+                write_report(args.report, payload)
+            return plan_exit_status(payload)
+
         if args.audit:
             payload = audit_qdf(qdf, args.search, args.replacement, align=args.align)
             print_audit_report(payload, as_json=args.json)

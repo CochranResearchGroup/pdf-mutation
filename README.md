@@ -79,6 +79,18 @@ strings. It records text object indexes, stream objects, font resources,
 decoded lengths, short decoded-text hashes, match counts, patchability, and
 split matches across text objects or font resources.
 
+To write a reviewable mutation plan without editing the PDF:
+
+```bash
+./pdf_glyph_replace.py input.pdf 3807 8304 --plan work/plan.json
+./pdf_glyph_replace.py input.pdf 3807 8304 --plan work/plan.json --json
+```
+
+Plan JSON is non-sensitive by default. It includes input fingerprint metadata,
+font resources, expected candidate counts, patchable match entries, glyph CID
+spans, replacement CIDs, and split candidates. It does not yet apply the plan;
+plan application is a separate roadmap milestone.
+
 To write a non-sensitive JSON report:
 
 ```bash
@@ -300,6 +312,8 @@ This first version is intentionally strict by default:
   resources, and validation hints;
 - `--audit` inventories every decoded text object and reports split mixed-font
   matches without including full decoded document text;
+- `--plan` writes a non-sensitive JSON mutation plan for same-glyph-count
+  patchable matches and split/unpatchable candidates, but does not apply it yet;
 - replacement characters must already exist in the active PDF font CMap;
 - matches must fit inside one `BT ... ET` text object;
 - supported exact-mode text drawing forms are hexadecimal `<...> Tj` and simple
