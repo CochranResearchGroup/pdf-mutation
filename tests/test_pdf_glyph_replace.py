@@ -571,7 +571,12 @@ class PdfGlyphReplaceTests(unittest.TestCase):
             output_pdf.write_bytes(b"%PDF-after\n")
 
             def fake_run_status(args):
-                p.Path(args[-1]).write_text("<html>bbox text</html>\n", encoding="utf-8")
+                output = p.Path(args[-1])
+                text = "8304" if "after" in output.name else "3807"
+                output.write_text(
+                    f'<html><word xMin="10" yMin="20" xMax="40" yMax="30">{text}</word></html>\n',
+                    encoding="utf-8",
+                )
                 return 0, b"", b""
 
             with (
@@ -583,15 +588,96 @@ class PdfGlyphReplaceTests(unittest.TestCase):
                     output_pdf=output_pdf,
                     bbox_dir=bbox_dir,
                     stem="output",
+                    search="3807",
+                    replacement="8304",
+                    align="exact",
                 )
 
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["before"]["status"], "ok")
         self.assertEqual(payload["after"]["status"], "ok")
         self.assertIn("sha256_12", payload["before"])
+        self.assertEqual(payload["alignment_assertions"]["status"], "ok")
+        self.assertEqual(payload["alignment_assertions"]["checked_pairs"], 1)
+        self.assertEqual(payload["alignment_assertions"]["contract"], "text_extraction_changed")
+        self.assertEqual(payload["alignment_assertions"]["before_match_count"], 1)
+        self.assertEqual(payload["alignment_assertions"]["after_match_count"], 1)
+        self.assertEqual(payload["alignment_assertions"]["assertions"], [])
         self.assertFalse(payload["privacy"]["report_includes_bbox_text"])
         self.assertTrue(payload["privacy"]["bbox_html_may_include_extracted_text"])
-        self.assertNotIn("bbox text", str(payload))
+        self.assertNotIn("3807", str(payload))
+        self.assertNotIn("8304", str(payload))
+
+    def test_bbox_alignment_assertions_check_left_and_right_edges_without_literal_text(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            root = p.Path(tmp)
+            before = root / "before.html"
+            after_left = root / "after-left.html"
+            after_right = root / "after-right.html"
+            before.write_text(
+                '<word xMin="100" yMin="20" xMax="150" yMax="30">37.34</word>',
+                encoding="utf-8",
+            )
+            after_left.write_text(
+                '<word xMin="100.2" yMin="20" xMax="165" yMax="30">138.46</word>',
+                encoding="utf-8",
+            )
+            after_right.write_text(
+                '<word xMin="85" yMin="20" xMax="150.3" yMax="30">138.46</word>',
+                encoding="utf-8",
+            )
+
+            left = p.bbox_alignment_assertions(
+                before_path=before,
+                after_path=after_left,
+                search="37.34",
+                replacement="138.46",
+                align="left",
+            )
+            right = p.bbox_alignment_assertions(
+                before_path=before,
+                after_path=after_right,
+                search="37.34",
+                replacement="138.46",
+                align="right",
+            )
+
+        self.assertEqual(left["status"], "ok")
+        self.assertEqual(left["assertions"][0]["contract"], "left_edge")
+        self.assertEqual(left["assertions"][0]["left_delta"], "0.2")
+        self.assertTrue(left["assertions"][0]["passed"])
+        self.assertEqual(right["status"], "ok")
+        self.assertEqual(right["assertions"][0]["contract"], "right_edge")
+        self.assertEqual(right["assertions"][0]["right_delta"], "0.3")
+        self.assertTrue(right["assertions"][0]["passed"])
+        self.assertNotIn("37.34", str(left))
+        self.assertNotIn("138.46", str(right))
+
+    def test_bbox_alignment_assertions_warn_on_failed_contract(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            root = p.Path(tmp)
+            before = root / "before.html"
+            after = root / "after.html"
+            before.write_text(
+                '<word xMin="100" yMin="20" xMax="150" yMax="30">37.34</word>',
+                encoding="utf-8",
+            )
+            after.write_text(
+                '<word xMin="112" yMin="20" xMax="170" yMax="30">138.46</word>',
+                encoding="utf-8",
+            )
+
+            payload = p.bbox_alignment_assertions(
+                before_path=before,
+                after_path=after,
+                search="37.34",
+                replacement="138.46",
+                align="left",
+            )
+
+        self.assertEqual(payload["status"], "warning")
+        self.assertFalse(payload["assertions"][0]["passed"])
+        self.assertIn("failed", payload["warnings"][0])
 
     def test_collect_bbox_evidence_warns_when_pdftotext_is_missing(self):
         with p.tempfile.TemporaryDirectory() as tmp:

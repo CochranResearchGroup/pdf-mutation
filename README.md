@@ -126,7 +126,9 @@ Use `--bbox-dir PATH` with write/apply modes and `--report` to generate
 optional before/after `pdftotext -bbox` HTML artifacts. The JSON report records
 artifact paths, sizes, short hashes, and warnings, but not extracted bbox text.
 If `pdftotext` is missing or bbox extraction fails, mutation still succeeds and
-the report records a layout-evidence warning.
+the report records a layout-evidence warning. For direct writes, exact mode
+records before/after extraction counts, while `--align left` and `--align right`
+record numeric bbox edge deltas and pass/fail assertions.
 
 ## Synthetic Fixtures
 
@@ -338,7 +340,7 @@ This first version is intentionally strict by default:
 - `--report` writes a non-sensitive JSON report with match locations, font
   resources, and validation hints;
 - `--bbox-dir` writes optional before/after bbox HTML artifacts and records
-  non-sensitive artifact metadata in the report;
+  non-sensitive artifact metadata and alignment assertions in the report;
 - `--audit` inventories every decoded text object and reports split mixed-font
   matches without including full decoded document text;
 - `--plan` writes a non-sensitive JSON mutation plan for same-glyph-count
