@@ -1059,6 +1059,25 @@ def plan_exit_status(payload: dict[str, object]) -> int:
     return 2 if int(expected["unpatchable_candidates"]) else 0
 
 
+def non_negative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--expect-count must be an integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("--expect-count must be non-negative")
+    return parsed
+
+
+def enforce_expect_count(expected_count: int | None, actual_count: int, *, label: str) -> None:
+    if expected_count is None:
+        return
+    if actual_count != expected_count:
+        raise SystemExit(
+            f"--expect-count mismatch: expected {expected_count} {label}, found {actual_count}"
+        )
+
+
 def load_json_file(path: Path) -> dict[str, object]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -1426,6 +1445,11 @@ def main() -> int:
         type=Path,
         help="apply a reviewed mutation plan JSON and fail closed if the source PDF no longer matches",
     )
+    parser.add_argument(
+        "--expect-count",
+        type=non_negative_int,
+        help="require exactly N patchable or applied matches before considering the operation successful",
+    )
     parser.add_argument("--json", action="store_true", help="emit dry-run report as JSON")
     parser.add_argument("--keep-qdf", type=Path, help="write the edited QDF for inspection")
     parser.add_argument("--report", type=Path, help="write a non-sensitive JSON mutation report")
@@ -1466,6 +1490,7 @@ def main() -> int:
                 plan,
                 input_pdf=args.input_pdf,
             )
+            enforce_expect_count(args.expect_count, changed_matches, label="applied match(es)")
             if args.keep_qdf:
                 args.keep_qdf.write_bytes(edited)
             fixed = run(["fix-qdf"], stdin=edited)
@@ -1496,6 +1521,13 @@ def main() -> int:
                 align=args.align,
                 input_pdf=args.input_pdf,
             )
+            expected = payload["expected"]
+            if isinstance(expected, dict):
+                enforce_expect_count(
+                    args.expect_count,
+                    int(expected["patchable_matches"]),
+                    label="patchable match(es)",
+                )
             write_report(args.plan, payload)
             print_plan_report(payload, as_json=args.json)
             if args.report:
@@ -1504,13 +1536,24 @@ def main() -> int:
 
         if args.audit:
             payload = audit_qdf(qdf, search, replacement, align=args.align)
+            enforce_expect_count(
+                args.expect_count,
+                int(payload["patchable_matches"]),
+                label="patchable match(es)",
+            )
             print_audit_report(payload, as_json=args.json)
             if args.report:
                 write_report(args.report, payload)
             return audit_exit_status(payload)
 
         reports, decode_maps = analyze_qdf(qdf, search, replacement, align=args.align)
+        patchable_matches = (
+            sum(report.match_count for report in reports)
+            if reports and all(report.feasible for report in reports)
+            else 0
+        )
         if args.dry_run:
+            enforce_expect_count(args.expect_count, patchable_matches, label="patchable match(es)")
             print_dry_run_report(
                 reports,
                 decode_maps,
@@ -1540,6 +1583,7 @@ def main() -> int:
             return 0
 
         edited, count = replace_qdf(qdf, search, replacement, align=args.align)
+        enforce_expect_count(args.expect_count, count, label="replaced match(es)")
         if count == 0:
             raise SystemExit(f"no decoded matches found for {search!r}")
         if args.keep_qdf:

@@ -84,6 +84,7 @@ To write a reviewable mutation plan without editing the PDF:
 ```bash
 ./pdf_glyph_replace.py input.pdf 3807 8304 --plan work/plan.json
 ./pdf_glyph_replace.py input.pdf 3807 8304 --plan work/plan.json --json
+./pdf_glyph_replace.py input.pdf 3807 8304 --plan work/plan.json --expect-count 1
 ```
 
 Plan JSON is non-sensitive by default. It includes input fingerprint metadata,
@@ -95,12 +96,18 @@ To apply a reviewed same-glyph-count plan later:
 ```bash
 ./pdf_glyph_replace.py input.pdf --apply-plan work/plan.json -o output.pdf
 ./pdf_glyph_replace.py input.pdf --apply-plan work/plan.json -o output.pdf --report work/apply-report.json
+./pdf_glyph_replace.py input.pdf --apply-plan work/plan.json -o output.pdf --expect-count 1
 ```
 
 Plan application verifies the input PDF fingerprint from the plan and checks
 each planned glyph span against a freshly regenerated QDF before writing the
 output PDF. Stale plans, split candidates, missing replacement glyphs, and
 length-changing plans fail closed.
+
+Use `--expect-count N` to require an exact patchable/applied match count. The
+guard applies to direct writes, dry-runs, audits, plan generation, and
+reviewed-plan application. In write modes, a mismatch fails before the output
+PDF is written.
 
 To write a non-sensitive JSON report:
 
@@ -327,6 +334,8 @@ This first version is intentionally strict by default:
   patchable matches and split/unpatchable candidates;
 - `--apply-plan` applies only reviewed same-glyph-count patchable plan entries
   after verifying the input fingerprint and planned QDF byte spans;
+- `--expect-count N` fails unless the operation finds exactly `N` patchable or
+  applied matches, and write modes fail before producing an output PDF;
 - replacement characters must already exist in the active PDF font CMap;
 - matches must fit inside one `BT ... ET` text object;
 - supported exact-mode text drawing forms are hexadecimal `<...> Tj` and simple
