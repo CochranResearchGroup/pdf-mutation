@@ -134,14 +134,20 @@ def bbox_alignment_assertions(
         if align == "right":
             passed = abs(right_delta) <= tolerance
             contract = "right_edge"
+            checked_edge = "x_max"
+            checked_delta = right_delta
         else:
             passed = abs(left_delta) <= tolerance
             contract = "left_edge"
+            checked_edge = "x_min"
+            checked_delta = left_delta
         assertions.append(
             {
                 "index": index,
                 "contract": contract,
                 "passed": passed,
+                "checked_edge": checked_edge,
+                "checked_delta": decimal_report(checked_delta),
                 "left_delta": decimal_report(left_delta),
                 "right_delta": decimal_report(right_delta),
                 "before": {

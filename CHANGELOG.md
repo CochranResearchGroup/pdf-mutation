@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Unit and public PDF smoke coverage for length-changing replacements when the
+  match appears at the beginning, middle, or end of a one-glyph-per-line text
+  object.
+- Bbox alignment assertions now identify the checked coordinate and measured
+  delta without embedding decoded document text.
+
 ## v0.1.5 | Public Length-Changing Fixture
 
 Maintenance release that replaces private positive length-changing smoke
