@@ -10,6 +10,7 @@ import pdf_fixture as f
 import pdf_glyph_replace as p
 import pdf_inventory as inv
 from pdf_mutation import adapters
+from pdf_mutation import cli
 from pdf_mutation import cmap as cmap_api
 from pdf_mutation import engine
 from pdf_mutation import layout
@@ -162,6 +163,9 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertIs(engine.require_tool, adapters.require_tool)
         self.assertIs(engine.collect_bbox_evidence, layout.collect_bbox_evidence)
         self.assertIs(engine.bbox_alignment_assertions, layout.bbox_alignment_assertions)
+        self.assertIs(p.main, cli.main)
+        self.assertIs(p.non_negative_int, cli.non_negative_int)
+        self.assertFalse(hasattr(engine, "main"))
 
     def test_importable_report_api_exposes_layout_helpers(self):
         with p.tempfile.TemporaryDirectory() as tmp:

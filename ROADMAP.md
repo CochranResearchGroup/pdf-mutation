@@ -195,6 +195,8 @@ Progress:
   modules while preserving the `pdf_mutation.engine` public exports.
 - Split bbox layout evidence into an internal `pdf_mutation.layout` module
   while preserving public reporting imports through `pdf_mutation.reports`.
+- Moved command-line orchestration into `pdf_mutation.cli`, leaving
+  `pdf_mutation.engine` focused on planner/apply/report APIs.
 - Added import-level API tests for engine and reporting helpers.
 
 ### M12 | Product Release Candidate
