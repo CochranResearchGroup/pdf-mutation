@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.1.4 | Planner Apply Package Boundary
+
+Product release that promotes the planner/apply workflow and importable Python
+API boundary while preserving the existing `pdf-glyph-replace` CLI behavior.
+
+### Added
+
+- Importable `pdf_mutation` package boundary with public `engine`, `reports`,
+  and `cli` modules.
+- Internal `cmap`, `layout`, and `adapters` modules for CMap/object parsing,
+  bbox layout evidence, and subprocess tool calls.
+- Regression tests that verify public imports remain stable while
+  implementation ownership moves out of the legacy script.
+
+### Changed
+
+- `pdf-glyph-replace` now resolves through `pdf_mutation.cli:main`.
+- `pdf_mutation.engine` now focuses on planner, audit, apply, and report
+  payload APIs rather than command-line orchestration.
+- `pdf_glyph_replace.py` is now a compatibility wrapper for existing imports
+  and direct script execution.
+
+### Compatibility
+
+- Existing CLI commands and direct `./pdf_glyph_replace.py` usage remain
+  supported.
+- Existing `pdf_glyph_replace` imports for planner/apply helpers and version
+  metadata remain supported.
+- New Python integrations should prefer `pdf_mutation.engine` for mutation APIs
+  and `pdf_mutation.reports` for reporting/layout helpers.
+
+### Known Limits
+
+- Split cross-object or cross-font matches remain audit/plan-only unless a
+  segmented replacement contract is implemented.
+- Replacement glyphs must still exist in the active embedded font.
+- Reports continue to omit decoded document text by default.
+
 ## v0.1.3 | Dogfood Summary Outputs
 
 Maintenance release that improves the dogfood manifest summary surface for

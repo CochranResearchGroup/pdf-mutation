@@ -286,17 +286,14 @@ qpdf --check work/smoke.8304.pdf
 pdftotext work/smoke.8304.pdf - | rg '8304|3807'
 
 ./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align right --dry-run
-./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align right -o work/smoke.amount.pdf
-qpdf --check work/smoke.amount.pdf
-pdftotext work/smoke.amount.pdf - | rg '138\.46|37\.34'
-pdftotext -bbox work/smoke.amount.pdf work/smoke.amount.bbox.html
-rg '138\.46' work/smoke.amount.bbox.html
+./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align right --plan work/smoke.amount.plan.json --json
 
 ./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align left --dry-run
-./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align left -o work/smoke.amount-left.pdf
-qpdf --check work/smoke.amount-left.pdf
-pdftotext work/smoke.amount-left.pdf - | rg '138\.46|37\.34'
 ```
+
+Do not create amount-mutated PDFs from private financial fixtures as smoke or
+release artifacts. Use plan-only output for private amount-like examples unless
+a non-sensitive synthetic fixture is available.
 
 ## Versioning And Release
 
@@ -312,7 +309,7 @@ python3 -m py_compile pdf_glyph_replace.py pdf_fixture.py pdf_inventory.py pdf_d
 python3 -m unittest discover -s tests -v
 python3 -m venv work/release-venv
 work/release-venv/bin/python -m pip install -e .
-work/release-venv/bin/python -c "from pdf_mutation.engine import plan_qdf; print(plan_qdf.__name__)"
+work/release-venv/bin/python -c "from pdf_mutation.engine import plan_qdf; from pdf_mutation import cli; print(plan_qdf.__name__, cli.main.__name__)"
 work/release-venv/bin/pdf-glyph-replace --version
 work/release-venv/bin/pdf-fixture-qdf --version
 work/release-venv/bin/pdf-inventory --version
