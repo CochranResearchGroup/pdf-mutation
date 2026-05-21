@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v0.1.6 | Length Position Coverage
+
+Maintenance release that broadens public length-changing alignment evidence
+across match positions and makes bbox assertion diagnostics easier to inspect
+without exposing decoded document text.
 
 ### Added
 

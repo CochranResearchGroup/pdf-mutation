@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pdf-mutation"
-version = "0.1.5"
+version = "0.1.6"
 description = "Deterministic glyph-preserving PDF text replacement CLI"
 readme = "README.md"
 requires-python = ">=3.11"
