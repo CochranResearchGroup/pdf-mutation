@@ -51,6 +51,29 @@ inventory, and release evidence exist only to validate and explain that product.
 
 ## Forward Milestones
 
+### M15 | Structured Unsupported-Case Summary
+
+Status: DONE
+
+Goal: Make unsupported split-object and mixed-font plans easier to triage
+without exposing decoded document text.
+
+Scope:
+- Add a compact summary of unpatchable text-object reasons.
+- Aggregate split candidate kinds and font-specific blocker reasons.
+- Reuse the same non-sensitive summary in audit and plan JSON.
+
+Acceptance Criteria:
+- Plan and audit outputs expose blocker counts by reason, split kind, and font.
+- Existing detailed segment metadata remains available for deeper review.
+- Reports continue to omit decoded document text and literal
+  search/replacement strings.
+
+Completed:
+- Added top-level `blocker_summary` to plan and audit JSON.
+- Covered cross-object, cross-font, and missing-glyph split blockers in tests.
+- Documented the summary fields in README.
+
 ### M7 | Mutation Planner
 
 Status: DONE

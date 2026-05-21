@@ -77,7 +77,9 @@ whether a mutation is structurally patchable:
 Audit JSON omits full decoded document text and literal search/replacement
 strings. It records text object indexes, stream objects, font resources,
 decoded lengths, short decoded-text hashes, match counts, patchability, and
-split matches across text objects or font resources.
+split matches across text objects or font resources. The `blocker_summary`
+section aggregates unpatchable text-object reasons, split kinds, blocker
+reasons, and blocker fonts without including decoded document text.
 
 To write a reviewable mutation plan without editing the PDF:
 
@@ -91,7 +93,9 @@ Plan JSON is non-sensitive by default. It includes input fingerprint metadata,
 font resources, expected candidate counts, patchable match entries, glyph CID
 spans, replacement CIDs, and split candidates. Split candidates include ordered
 segment metadata and font-specific blockers, but remain unpatchable until a
-separate segmented-plan schema is implemented.
+separate segmented-plan schema is implemented. The top-level `blocker_summary`
+aggregates split kinds and blocker reasons so unsupported plans can be triaged
+without scanning every candidate.
 
 To apply a reviewed same-glyph-count plan later:
 

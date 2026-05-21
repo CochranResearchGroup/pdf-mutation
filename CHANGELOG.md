@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Plan and audit JSON now include a non-sensitive `blocker_summary` that
+  aggregates unpatchable text-object reasons, split kinds, blocker reasons, and
+  blocker fonts.
+
 ## v0.1.6 | Length Position Coverage
 
 Maintenance release that broadens public length-changing alignment evidence
