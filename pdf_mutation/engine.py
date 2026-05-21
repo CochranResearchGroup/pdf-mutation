@@ -48,7 +48,7 @@ from pdf_mutation.layout import (
 )
 
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 BT_ET_RE = re.compile(rb"BT\n(.*?)\nET", re.S)
 FONT_SET_RE = re.compile(rb"/(F[^\s/<>\[\]()]+)\s+[-+.0-9]+\s+Tf")
