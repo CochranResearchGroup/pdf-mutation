@@ -614,6 +614,27 @@ def split_segments_for_match(
     return segments, blockers
 
 
+def blocker_summary(
+    *,
+    text_object_reasons: list[str],
+    split_kinds: list[str],
+    split_blockers: list[dict[str, object]],
+) -> dict[str, object]:
+    blocker_reason_counts = Counter(str(blocker["reason"]) for blocker in split_blockers)
+    blocker_font_counts = Counter(str(blocker["font"]) for blocker in split_blockers)
+    return {
+        "text_object_reason_counts": dict(sorted(Counter(text_object_reasons).items())),
+        "split_kind_counts": dict(sorted(Counter(split_kinds).items())),
+        "split_blocker_reason_counts": dict(sorted(blocker_reason_counts.items())),
+        "split_blocker_font_counts": dict(sorted(blocker_font_counts.items())),
+        "split_blocker_count": len(split_blockers),
+        "privacy": {
+            "decoded_text_included": False,
+            "literal_search_replacement_included": False,
+        },
+    }
+
+
 def plan_qdf(
     qdf: bytes,
     search: str,
@@ -746,6 +767,12 @@ def plan_qdf(
 
     patchable_matches = sum(1 for match in matches if match.patchable)
     unpatchable_matches = sum(1 for match in matches if not match.patchable) + len(split_candidates)
+    unpatchable_reasons = [match.reason for match in matches if not match.patchable]
+    split_blockers = [
+        blocker
+        for candidate in split_candidates
+        for blocker in candidate.blockers
+    ]
     payload: dict[str, object] = {
         "schema": "pdf-mutation-plan",
         "schema_version": 1,
@@ -769,6 +796,11 @@ def plan_qdf(
         },
         "matches": [dataclasses.asdict(match) for match in matches],
         "split_candidates": [dataclasses.asdict(candidate) for candidate in split_candidates],
+        "blocker_summary": blocker_summary(
+            text_object_reasons=unpatchable_reasons,
+            split_kinds=[candidate.split_kind for candidate in split_candidates],
+            split_blockers=split_blockers,
+        ),
         "privacy": {
             "decoded_text_included": False,
             "literal_search_replacement_included": False,
@@ -896,6 +928,16 @@ def audit_qdf(qdf: bytes, search: str, replacement: str, *, align: str) -> dict[
     total_matches = sum(obj.match_count for obj in text_objects) + sum(match.match_count for match in split_matches)
     patchable_matches = sum(obj.match_count for obj in text_objects if obj.patchable)
     unpatchable_matches = total_matches - patchable_matches
+    unpatchable_reasons = [
+        obj.reason
+        for obj in text_objects
+        if obj.match_count and not obj.patchable
+    ]
+    split_blockers = [
+        blocker
+        for match in split_matches
+        for blocker in match.blockers
+    ]
     return {
         "version": __version__,
         "mode": "audit",
@@ -915,6 +957,11 @@ def audit_qdf(qdf: bytes, search: str, replacement: str, *, align: str) -> dict[
         "split_match_count": sum(match.match_count for match in split_matches),
         "text_objects": [dataclasses.asdict(obj) for obj in text_objects],
         "split_matches": [dataclasses.asdict(match) for match in split_matches],
+        "blocker_summary": blocker_summary(
+            text_object_reasons=unpatchable_reasons,
+            split_kinds=[match.split_kind for match in split_matches],
+            split_blockers=split_blockers,
+        ),
         "privacy": {
             "decoded_text_included": False,
             "literal_search_replacement_included": False,

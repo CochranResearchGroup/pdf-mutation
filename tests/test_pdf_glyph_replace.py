@@ -451,6 +451,20 @@ class PdfGlyphReplaceTests(unittest.TestCase):
             [(1, "F4", 0, 2), (2, "F5", 0, 2)],
         )
         self.assertEqual(payload["split_matches"][0]["blockers"], [])
+        self.assertEqual(
+            payload["blocker_summary"],
+            {
+                "text_object_reason_counts": {},
+                "split_kind_counts": {"cross_text_object_and_font": 1},
+                "split_blocker_reason_counts": {},
+                "split_blocker_font_counts": {},
+                "split_blocker_count": 0,
+                "privacy": {
+                    "decoded_text_included": False,
+                    "literal_search_replacement_included": False,
+                },
+            },
+        )
         self.assertEqual([obj["font"] for obj in payload["text_objects"]], ["F4", "F5", "F5"])
         self.assertEqual([obj["match_count"] for obj in payload["text_objects"]], [0, 0, 0])
         self.assertFalse(payload["privacy"]["decoded_text_included"])
@@ -473,6 +487,36 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(payload["text_objects"][1]["font"], "F5")
         self.assertTrue(payload["text_objects"][1]["patchable"])
         self.assertEqual(payload["text_objects"][1]["alignment_contract"], "exact glyph-count replacement preserves existing layout operators")
+
+    def test_audit_qdf_summarizes_split_blockers_without_literal_text(self):
+        f5_map = dict(f.DEFAULT_CIDS)
+        del f5_map["4"]
+        qdf = mixed_font_qdf(
+            f.text_object("38", font="F4", x="100", y="10"),
+            f.text_object("07", font="F5", x="140", y="10", cid_map=f5_map),
+            f5_cid_map=f5_map,
+        )
+
+        payload = p.audit_qdf(qdf, "3807", "8304", align="exact")
+
+        self.assertEqual(
+            payload["blocker_summary"],
+            {
+                "text_object_reason_counts": {},
+                "split_kind_counts": {"cross_text_object_and_font": 1},
+                "split_blocker_reason_counts": {
+                    "replacement character(s) not present in active font": 1
+                },
+                "split_blocker_font_counts": {"F5": 1},
+                "split_blocker_count": 1,
+                "privacy": {
+                    "decoded_text_included": False,
+                    "literal_search_replacement_included": False,
+                },
+            },
+        )
+        self.assertNotIn("3807", str(payload))
+        self.assertNotIn("8304", str(payload))
 
     def test_audit_exit_status_distinguishes_patchable_missing_and_unpatchable(self):
         patchable = {
@@ -504,6 +548,20 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(payload["expected"]["patchable_matches"], 1)
         self.assertEqual(payload["expected"]["unpatchable_candidates"], 0)
         self.assertEqual(payload["expected"]["split_candidates"], 0)
+        self.assertEqual(
+            payload["blocker_summary"],
+            {
+                "text_object_reason_counts": {},
+                "split_kind_counts": {},
+                "split_blocker_reason_counts": {},
+                "split_blocker_font_counts": {},
+                "split_blocker_count": 0,
+                "privacy": {
+                    "decoded_text_included": False,
+                    "literal_search_replacement_included": False,
+                },
+            },
+        )
         self.assertRegex(payload["plan_id"], r"^[0-9a-f]{16}$")
         self.assertFalse(payload["privacy"]["decoded_text_included"])
         self.assertFalse(payload["privacy"]["literal_search_replacement_included"])
@@ -550,6 +608,11 @@ class PdfGlyphReplaceTests(unittest.TestCase):
             [(1, "F4", 0, 2), (2, "F5", 0, 2)],
         )
         self.assertEqual(payload["split_candidates"][0]["blockers"], [])
+        self.assertEqual(
+            payload["blocker_summary"]["split_kind_counts"],
+            {"cross_text_object_and_font": 1},
+        )
+        self.assertEqual(payload["blocker_summary"]["split_blocker_count"], 0)
 
     def test_plan_qdf_records_adjacent_same_font_split_as_unpatchable_segmented_candidate(self):
         qdf = f.qdf_document(
@@ -567,6 +630,8 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertEqual(split["fonts"], ["F4", "F4"])
         self.assertEqual(split["blockers"], [])
         self.assertTrue(all(segment["replacement_glyphs_available"] for segment in split["segments"]))
+        self.assertEqual(payload["blocker_summary"]["split_kind_counts"], {"cross_text_object": 1})
+        self.assertEqual(payload["blocker_summary"]["split_blocker_count"], 0)
 
     def test_plan_qdf_records_missing_replacement_glyph_without_literal_replacement(self):
         qdf = f.synthetic_qdf("3807")
@@ -580,6 +645,10 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertFalse(match["patchable"])
         self.assertEqual(match["reason"], "replacement character(s) not present in active font")
         self.assertEqual(match["replacement_cids"], [])
+        self.assertEqual(
+            payload["blocker_summary"]["text_object_reason_counts"],
+            {"replacement character(s) not present in active font": 1},
+        )
         self.assertNotIn("3807", str(payload))
         self.assertNotIn("ZZZZ", str(payload))
 
@@ -610,6 +679,22 @@ class PdfGlyphReplaceTests(unittest.TestCase):
                     "missing_replacement_glyph_count": 1,
                 }
             ],
+        )
+        self.assertEqual(
+            payload["blocker_summary"],
+            {
+                "text_object_reason_counts": {},
+                "split_kind_counts": {"cross_text_object_and_font": 1},
+                "split_blocker_reason_counts": {
+                    "replacement character(s) not present in active font": 1
+                },
+                "split_blocker_font_counts": {"F5": 1},
+                "split_blocker_count": 1,
+                "privacy": {
+                    "decoded_text_included": False,
+                    "literal_search_replacement_included": False,
+                },
+            },
         )
         self.assertNotIn("3807", str(payload))
         self.assertNotIn("8304", str(payload))
