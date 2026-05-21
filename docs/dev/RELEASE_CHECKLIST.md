@@ -32,6 +32,27 @@ work/release-venv/bin/pdf-dogfood-summary --version
 work/release-venv/bin/python -m pip wheel . -w work/dist
 ```
 
+Run the public length-changing PDF smoke:
+
+```bash
+work/release-venv/bin/pdf-fixture-qdf 3734 --pdf --one-glyph-per-line --x 653.375 --y 1370 -o work/release.public-length.pdf
+work/release-venv/bin/pdf-glyph-replace work/release.public-length.pdf 3734 13846 --align left -o work/release.public-length-left.pdf --report work/release.public-length-left.json --bbox-dir work/release.public-length-left-bbox
+work/release-venv/bin/pdf-glyph-replace work/release.public-length.pdf 3734 13846 --align right -o work/release.public-length-right.pdf --report work/release.public-length-right.json --bbox-dir work/release.public-length-right-bbox
+qpdf --check work/release.public-length-left.pdf
+qpdf --check work/release.public-length-right.pdf
+pdftotext work/release.public-length-left.pdf - | rg '13846|3734'
+pdftotext work/release.public-length-right.pdf - | rg '13846|3734'
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+for name in ("left", "right"):
+    report = json.loads(Path(f"work/release.public-length-{name}.json").read_text())
+    assert report["layout_evidence"]["status"] == "ok"
+    assert report["layout_evidence"]["alignment_assertions"]["status"] == "ok"
+PY
+```
+
 When local PDF smoke fixtures are available, run:
 
 ```bash
@@ -47,8 +68,9 @@ test "$amount_plan_rc" -eq 2
 ```
 
 Do not create amount-mutated PDFs from private financial fixtures as release
-evidence. Use plan-only output to verify the fail-closed length-changing plan
-contract unless a non-sensitive fixture is available.
+evidence. Use the public length-changing fixture above for positive
+length-changing evidence and private amount-like fixtures only for dry-run or
+plan-only checks.
 
 ## Git
 

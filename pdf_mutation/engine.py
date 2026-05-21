@@ -373,6 +373,8 @@ def replace_variable_width_aligned(
     for offset, cid in enumerate(replacement_codes):
         if offset == 0 and old_draws[0].group("td"):
             td = old_draws[offset].group("td")
+        elif offset == 0:
+            td = b""
         else:
             td = previous_char_advances.get(replacement[offset - 1], default_advance)
         if td:

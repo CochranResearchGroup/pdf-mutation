@@ -1,6 +1,9 @@
 import contextlib
 import io
 import json
+import shutil
+import subprocess
+import sys
 import unittest
 import unittest.mock
 
@@ -247,6 +250,72 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertIn(b"9.6 0 Td <0032> Tj", edited)
         self.assertIn(b"3.6 0 Td <002E> Tj", edited)
         self.assertIn(b"9.6 0 Td <0030> Tj", edited)
+
+    def test_left_aligned_replacement_at_text_start_does_not_insert_leading_td(self):
+        qdf = f.synthetic_qdf("3734", one_glyph_per_line=True, x="653.375", y="1370")
+
+        edited, count = p.replace_qdf(qdf, "3734", "13846", align="left")
+
+        self.assertEqual(count, 1)
+        self.assertIn(b"1 0 0 -1 653.375 1370 Tm\n<002B> Tj", edited)
+        self.assertNotIn(b"Tm\n9.6 0 Td <002B> Tj", edited)
+
+    @unittest.skipUnless(
+        all(shutil.which(tool) for tool in ("qpdf", "fix-qdf", "pdftotext")),
+        "requires qpdf, fix-qdf, and pdftotext",
+    )
+    def test_public_pdf_fixture_smokes_left_and_right_bbox_alignment(self):
+        with p.tempfile.TemporaryDirectory() as tmp:
+            root = p.Path(tmp)
+            input_pdf = root / "public-length.pdf"
+            input_pdf.write_bytes(
+                f.synthetic_pdf("3734", one_glyph_per_line=True, x="653.375", y="1370")
+            )
+
+            for align in ("left", "right"):
+                output_pdf = root / f"public-length-{align}.pdf"
+                report_path = root / f"public-length-{align}.json"
+                bbox_dir = root / f"bbox-{align}"
+
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        "pdf_glyph_replace.py",
+                        str(input_pdf),
+                        "3734",
+                        "13846",
+                        "--align",
+                        align,
+                        "-o",
+                        str(output_pdf),
+                        "--report",
+                        str(report_path),
+                        "--bbox-dir",
+                        str(bbox_dir),
+                    ],
+                    cwd=p.Path(__file__).resolve().parents[1],
+                    check=False,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
+                subprocess.run(["qpdf", "--check", str(output_pdf)], check=True)
+                extracted = subprocess.run(
+                    ["pdftotext", str(output_pdf), "-"],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                ).stdout.decode("utf-8")
+                self.assertIn("13846", extracted)
+                self.assertNotIn("3734", extracted)
+
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+                assertions = report["layout_evidence"]["alignment_assertions"]
+                self.assertEqual(assertions["status"], "ok")
+                self.assertEqual(assertions["align"], align)
+                self.assertEqual(assertions["checked_pairs"], 1)
+                self.assertTrue(assertions["assertions"][0]["passed"])
+                self.assertNotIn("3734", json.dumps(report))
+                self.assertNotIn("13846", json.dumps(report))
 
     def test_analyze_qdf_reports_feasibility(self):
         qdf = f.synthetic_qdf("3807", one_glyph_per_line=True)

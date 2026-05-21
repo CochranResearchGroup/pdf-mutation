@@ -230,7 +230,7 @@ Progress:
 
 ### M13 | Public Length-Changing Fixture
 
-Status: PLANNED
+Status: DONE
 
 Goal: Replace private amount-like smoke coverage with a public, synthetic PDF
 fixture that exercises length-changing layout behavior safely.
@@ -251,6 +251,35 @@ Acceptance Criteria:
   edge assertions without embedding decoded document text in reports.
 - README and release checklist no longer depend on private amount-like PDFs for
   positive length-changing evidence.
+
+Completed:
+- Added `pdf-fixture-qdf --pdf` for standalone synthetic PDFs using the same
+  Type0 font, `/ToUnicode` CMap, and one-glyph-per-line text objects as the QDF
+  fixture helper.
+- Added public integration coverage for `3734 -> 13846` with both
+  `--align left` and `--align right`, including `--bbox-dir` edge assertions.
+- Kept private amount-like fixtures plan-only in release documentation and
+  moved positive length-changing evidence to the public fixture.
+
+### M14 | Start-Glyph Alignment Hardening
+
+Status: PLANNED
+
+Goal: Broaden deterministic layout coverage around match positions inside a
+text object.
+
+Scope:
+- Add examples for matches at the beginning, middle, and end of one-glyph-line
+  text objects.
+- Confirm inferred advances remain deterministic when punctuation or prefixes
+  surround the match.
+- Keep reports non-sensitive while making failed alignment assertions easier to
+  triage.
+
+Acceptance Criteria:
+- Unit and public PDF smoke coverage describe each match-position case.
+- Failed alignment evidence points to the coordinate that violated the active
+  contract without embedding decoded document text.
 
 ## Supporting Infrastructure Lane
 
