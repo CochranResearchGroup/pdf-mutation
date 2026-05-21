@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthetic QDF fixture helpers for pdf-mutation tests and public repros."""
+"""Synthetic PDF/QDF fixture helpers for pdf-mutation tests and public repros."""
 
 from __future__ import annotations
 
@@ -170,12 +170,86 @@ def synthetic_qdf(
     return qdf_document(text_object(text, one_glyph_per_line=one_glyph_per_line, x=x, y=y))
 
 
+def _pdf_stream_dict(payload: bytes) -> bytes:
+    return b"<<\n  /Length " + str(len(payload)).encode("ascii") + b"\n>>\nstream\n" + payload + b"endstream"
+
+
+def synthetic_pdf(
+    text: str,
+    *,
+    one_glyph_per_line: bool = False,
+    x: str = "100",
+    y: str = "10",
+) -> bytes:
+    """Build a standalone PDF containing one synthetic Type0-font text object."""
+    content = b"BT\n" + text_object(text, one_glyph_per_line=one_glyph_per_line, x=x, y=y) + b"\nET\n"
+    cmap = cmap_stream()
+    objects = [
+        (1, b"<<\n  /Type /Catalog\n  /Pages 2 0 R\n>>"),
+        (2, b"<<\n  /Type /Pages\n  /Kids [3 0 R]\n  /Count 1\n>>"),
+        (
+            3,
+            b"<<\n"
+            b"  /Type /Page\n"
+            b"  /Parent 2 0 R\n"
+            b"  /MediaBox [0 0 800 1600]\n"
+            b"  /Resources << /Font << /F4 5 0 R >> >>\n"
+            b"  /Contents 4 0 R\n"
+            b">>",
+        ),
+        (4, _pdf_stream_dict(content)),
+        (
+            5,
+            b"<<\n"
+            b"  /Type /Font\n"
+            b"  /Subtype /Type0\n"
+            b"  /BaseFont /AAAAAA+SyntheticFixture\n"
+            b"  /Encoding /Identity-H\n"
+            b"  /DescendantFonts [6 0 R]\n"
+            b"  /ToUnicode 7 0 R\n"
+            b">>",
+        ),
+        (
+            6,
+            b"<<\n"
+            b"  /Type /Font\n"
+            b"  /Subtype /CIDFontType2\n"
+            b"  /BaseFont /AAAAAA+SyntheticFixture\n"
+            b"  /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>\n"
+            b"  /DW 600\n"
+            b">>",
+        ),
+        (7, _pdf_stream_dict(cmap)),
+    ]
+
+    chunks = [b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n"]
+    offsets: dict[int, int] = {}
+    for object_id, payload in objects:
+        offsets[object_id] = sum(len(chunk) for chunk in chunks)
+        chunks.append(str(object_id).encode("ascii") + b" 0 obj\n" + payload + b"\nendobj\n")
+    xref_offset = sum(len(chunk) for chunk in chunks)
+    chunks.append(b"xref\n0 8\n0000000000 65535 f \n")
+    for object_id in range(1, 8):
+        chunks.append(f"{offsets[object_id]:010d} 00000 n \n".encode("ascii"))
+    chunks.append(
+        b"trailer\n<<\n  /Size 8\n  /Root 1 0 R\n>>\nstartxref\n"
+        + str(xref_offset).encode("ascii")
+        + b"\n%%EOF\n"
+    )
+    return b"".join(chunks)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a synthetic QDF fixture for pdf-mutation repros."
+        description="Generate a synthetic PDF or QDF fixture for pdf-mutation repros."
     )
     parser.add_argument("text", help="decoded text to encode into the fixture")
     parser.add_argument("-o", "--output", type=Path, help="write fixture to this path")
+    parser.add_argument(
+        "--pdf",
+        action="store_true",
+        help="write a standalone PDF instead of the default QDF-like fixture",
+    )
     parser.add_argument(
         "--one-glyph-per-line",
         action="store_true",
@@ -190,19 +264,28 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        qdf = synthetic_qdf(
-            args.text,
-            one_glyph_per_line=args.one_glyph_per_line,
-            x=args.x,
-            y=args.y,
+        fixture = (
+            synthetic_pdf(
+                args.text,
+                one_glyph_per_line=args.one_glyph_per_line,
+                x=args.x,
+                y=args.y,
+            )
+            if args.pdf
+            else synthetic_qdf(
+                args.text,
+                one_glyph_per_line=args.one_glyph_per_line,
+                x=args.x,
+                y=args.y,
+            )
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
     if args.output:
-        args.output.write_bytes(qdf)
+        args.output.write_bytes(fixture)
     else:
-        sys.stdout.buffer.write(qdf)
+        sys.stdout.buffer.write(fixture)
     return 0
 
 

@@ -132,18 +132,37 @@ record numeric bbox edge deltas and pass/fail assertions.
 
 ## Synthetic Fixtures
 
-Use `pdf-fixture-qdf` to create public, non-sensitive QDF fixtures for issues,
-tests, and repros:
+Use `pdf-fixture-qdf` to create public, non-sensitive QDF or standalone PDF
+fixtures for issues, tests, and repros:
 
 ```bash
 pdf-fixture-qdf 3807 -o work/fixture.qdf
 pdf-fixture-qdf '$37.34' --one-glyph-per-line --x 653.375 --y 1370 -o work/amount.qdf
+pdf-fixture-qdf 3734 --pdf --one-glyph-per-line --x 653.375 --y 1370 -o work/public-length.pdf
 ```
 
-The fixture helper emits a minimal QDF-like byte stream with a synthetic Type0
-font, `/ToUnicode` CMap, and hexadecimal text operands. It is designed for
-testing `pdf_glyph_replace` parsing and replacement logic without sharing
-private PDFs.
+The fixture helper emits a minimal QDF-like byte stream by default, or a valid
+standalone PDF with `--pdf`. Both forms use a synthetic Type0 font,
+`/ToUnicode` CMap, and hexadecimal text operands. They are designed for testing
+`pdf_glyph_replace` parsing, replacement logic, and public smoke workflows
+without sharing private PDFs.
+
+Use the standalone PDF mode to smoke length-changing layout behavior with
+public data:
+
+```bash
+pdf-fixture-qdf 3734 --pdf --one-glyph-per-line --x 653.375 --y 1370 -o work/public-length.pdf
+./pdf_glyph_replace.py work/public-length.pdf 3734 13846 --align left -o work/public-length-left.pdf --report work/public-length-left.json --bbox-dir work/public-length-left-bbox
+./pdf_glyph_replace.py work/public-length.pdf 3734 13846 --align right -o work/public-length-right.pdf --report work/public-length-right.json --bbox-dir work/public-length-right-bbox
+qpdf --check work/public-length-left.pdf
+qpdf --check work/public-length-right.pdf
+pdftotext work/public-length-left.pdf - | rg '13846|3734'
+pdftotext work/public-length-right.pdf - | rg '13846|3734'
+```
+
+The public length-changing smoke should report `layout_evidence.status: "ok"`
+and `alignment_assertions.status: "ok"` for both `--align left` and
+`--align right`.
 
 The same helper is available from Python:
 
@@ -153,6 +172,12 @@ import pdf_fixture
 qdf = pdf_fixture.synthetic_qdf("3807")
 amount_qdf = pdf_fixture.synthetic_qdf(
     "$37.34",
+    one_glyph_per_line=True,
+    x="653.375",
+    y="1370",
+)
+public_pdf = pdf_fixture.synthetic_pdf(
+    "3734",
     one_glyph_per_line=True,
     x="653.375",
     y="1370",
@@ -277,7 +302,19 @@ pdf-dogfood --version
 pdf-dogfood-summary --version
 ```
 
-Run local PDF smoke tests when fixture PDFs are available:
+Run public PDF smoke tests:
+
+```bash
+pdf-fixture-qdf 3734 --pdf --one-glyph-per-line --x 653.375 --y 1370 -o work/public-length.pdf
+./pdf_glyph_replace.py work/public-length.pdf 3734 13846 --align left -o work/public-length-left.pdf --report work/public-length-left.json --bbox-dir work/public-length-left-bbox
+./pdf_glyph_replace.py work/public-length.pdf 3734 13846 --align right -o work/public-length-right.pdf --report work/public-length-right.json --bbox-dir work/public-length-right-bbox
+qpdf --check work/public-length-left.pdf
+qpdf --check work/public-length-right.pdf
+pdftotext work/public-length-left.pdf - | rg '13846|3734'
+pdftotext work/public-length-right.pdf - | rg '13846|3734'
+```
+
+Run private PDF smoke tests only when local fixture PDFs are available:
 
 ```bash
 ./pdf_glyph_replace.py tmp.before-travel.pdf 3807 8304 --dry-run
@@ -287,8 +324,6 @@ pdftotext work/smoke.8304.pdf - | rg '8304|3807'
 
 ./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align right --dry-run
 ./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align right --plan work/smoke.amount.plan.json --json
-
-./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align left --dry-run
 ```
 
 Do not create amount-mutated PDFs from private financial fixtures as smoke or

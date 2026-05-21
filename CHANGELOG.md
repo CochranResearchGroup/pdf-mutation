@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `pdf-fixture-qdf --pdf` for public, standalone synthetic PDF fixtures.
+- Public length-changing smoke coverage for `--align left` and `--align right`
+  using bbox edge assertions from a non-sensitive fixture.
+
+### Fixed
+
+- Length-changing replacements at the first glyph in a one-glyph-per-line text
+  object no longer add an unintended leading `Td` before the first replacement
+  glyph.
+
 ## v0.1.4 | Planner Apply Package Boundary
 
 Product release that promotes the planner/apply workflow and importable Python
