@@ -167,7 +167,7 @@ Progress:
 
 ### M11 | Engine And CLI Boundary
 
-Status: IN PROGRESS
+Status: DONE
 
 Goal: Split reusable mutation logic from command-line orchestration.
 
@@ -201,7 +201,7 @@ Progress:
 
 ### M12 | Product Release Candidate
 
-Status: PLANNED
+Status: IN PROGRESS
 
 Goal: Cut the next release only after the planner/apply product loop is
 coherent.
@@ -216,6 +216,11 @@ Acceptance Criteria:
 - The release has a documented planner/apply workflow.
 - The release has a clear compatibility statement for existing CLI users.
 - Dogfood evidence supports the release but does not define its direction.
+
+Progress:
+- Prepared `v0.1.4` release notes for the planner/apply package boundary.
+- Marked M11 complete after the engine, reporting, layout, adapter, and CLI
+  boundaries landed with CI coverage.
 
 ## Supporting Infrastructure Lane
 
@@ -255,11 +260,7 @@ qpdf --check work/smoke.8304.pdf
 pdftotext work/smoke.8304.pdf - | rg '8304|3807'
 
 ./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align right --dry-run
-./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align right -o work/smoke.amount.pdf --report work/smoke.amount.report.json
-qpdf --check work/smoke.amount.pdf
-pdftotext work/smoke.amount.pdf - | rg '138\.46|37\.34'
-pdftotext -bbox work/smoke.amount.pdf work/smoke.amount.bbox.html
-rg '138\.46' work/smoke.amount.bbox.html
+./pdf_glyph_replace.py tmp.before-travel.pdf 37.34 138.46 --align right --plan work/smoke.amount.plan.json --json
 ```
 
 ## Completed History
