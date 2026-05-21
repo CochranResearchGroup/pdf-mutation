@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v0.1.5 | Public Length-Changing Fixture
+
+Maintenance release that replaces private positive length-changing smoke
+coverage with a public synthetic PDF fixture and tightens a start-of-text
+alignment edge case.
 
 ### Added
 
