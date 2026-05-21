@@ -263,7 +263,7 @@ Completed:
 
 ### M14 | Start-Glyph Alignment Hardening
 
-Status: PLANNED
+Status: DONE
 
 Goal: Broaden deterministic layout coverage around match positions inside a
 text object.
@@ -280,6 +280,14 @@ Acceptance Criteria:
 - Unit and public PDF smoke coverage describe each match-position case.
 - Failed alignment evidence points to the coordinate that violated the active
   contract without embedding decoded document text.
+
+Completed:
+- Added unit coverage for length-changing matches at the beginning, middle,
+  and end of one-glyph-per-line text objects.
+- Expanded the public synthetic PDF smoke to validate left and right bbox
+  alignment for all three match positions.
+- Added non-sensitive assertion fields that name the checked coordinate and
+  measured delta for faster failed-alignment triage.
 
 ## Supporting Infrastructure Lane
 

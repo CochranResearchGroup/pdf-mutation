@@ -260,62 +260,98 @@ class PdfGlyphReplaceTests(unittest.TestCase):
         self.assertIn(b"1 0 0 -1 653.375 1370 Tm\n<002B> Tj", edited)
         self.assertNotIn(b"Tm\n9.6 0 Td <002B> Tj", edited)
 
+    def test_length_changing_replacement_handles_match_positions(self):
+        cases = {
+            "start": ("3734 A", b"Tm\n<002B> Tj"),
+            "middle": ("A 3734 A", b"9.6 0 Td <002B> Tj"),
+            "end": ("A 3734", b"9.6 0 Td <002B> Tj"),
+        }
+
+        for position, (text, first_replacement_line) in cases.items():
+            with self.subTest(position=position, align="left"):
+                qdf = f.synthetic_qdf(text, one_glyph_per_line=True, x="653.375", y="1370")
+                edited, count = p.replace_qdf(qdf, "3734", "13846", align="left")
+
+                self.assertEqual(count, 1)
+                self.assertIn(b"1 0 0 -1 653.375 1370 Tm", edited)
+                self.assertIn(first_replacement_line, edited)
+
+            with self.subTest(position=position, align="right"):
+                qdf = f.synthetic_qdf(text, one_glyph_per_line=True, x="653.375", y="1370")
+                edited, count = p.replace_qdf(qdf, "3734", "13846", align="right")
+
+                self.assertEqual(count, 1)
+                self.assertIn(b"1 0 0 -1 643.775 1370 Tm", edited)
+                self.assertIn(first_replacement_line, edited)
+
     @unittest.skipUnless(
         all(shutil.which(tool) for tool in ("qpdf", "fix-qdf", "pdftotext")),
         "requires qpdf, fix-qdf, and pdftotext",
     )
-    def test_public_pdf_fixture_smokes_left_and_right_bbox_alignment(self):
+    def test_public_pdf_fixture_smokes_positioned_left_and_right_bbox_alignment(self):
+        cases = {
+            "start": "3734 A",
+            "middle": "A 3734 A",
+            "end": "A 3734",
+        }
         with p.tempfile.TemporaryDirectory() as tmp:
             root = p.Path(tmp)
-            input_pdf = root / "public-length.pdf"
-            input_pdf.write_bytes(
-                f.synthetic_pdf("3734", one_glyph_per_line=True, x="653.375", y="1370")
-            )
-
-            for align in ("left", "right"):
-                output_pdf = root / f"public-length-{align}.pdf"
-                report_path = root / f"public-length-{align}.json"
-                bbox_dir = root / f"bbox-{align}"
-
-                result = subprocess.run(
-                    [
-                        sys.executable,
-                        "pdf_glyph_replace.py",
-                        str(input_pdf),
-                        "3734",
-                        "13846",
-                        "--align",
-                        align,
-                        "-o",
-                        str(output_pdf),
-                        "--report",
-                        str(report_path),
-                        "--bbox-dir",
-                        str(bbox_dir),
-                    ],
-                    cwd=p.Path(__file__).resolve().parents[1],
-                    check=False,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+            for position, text in cases.items():
+                input_pdf = root / f"public-length-{position}.pdf"
+                input_pdf.write_bytes(
+                    f.synthetic_pdf(text, one_glyph_per_line=True, x="653.375", y="1370")
                 )
-                self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
-                subprocess.run(["qpdf", "--check", str(output_pdf)], check=True)
-                extracted = subprocess.run(
-                    ["pdftotext", str(output_pdf), "-"],
-                    check=True,
-                    stdout=subprocess.PIPE,
-                ).stdout.decode("utf-8")
-                self.assertIn("13846", extracted)
-                self.assertNotIn("3734", extracted)
 
-                report = json.loads(report_path.read_text(encoding="utf-8"))
-                assertions = report["layout_evidence"]["alignment_assertions"]
-                self.assertEqual(assertions["status"], "ok")
-                self.assertEqual(assertions["align"], align)
-                self.assertEqual(assertions["checked_pairs"], 1)
-                self.assertTrue(assertions["assertions"][0]["passed"])
-                self.assertNotIn("3734", json.dumps(report))
-                self.assertNotIn("13846", json.dumps(report))
+                for align in ("left", "right"):
+                    output_pdf = root / f"public-length-{position}-{align}.pdf"
+                    report_path = root / f"public-length-{position}-{align}.json"
+                    bbox_dir = root / f"bbox-{position}-{align}"
+
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            "pdf_glyph_replace.py",
+                            str(input_pdf),
+                            "3734",
+                            "13846",
+                            "--align",
+                            align,
+                            "-o",
+                            str(output_pdf),
+                            "--report",
+                            str(report_path),
+                            "--bbox-dir",
+                            str(bbox_dir),
+                        ],
+                        cwd=p.Path(__file__).resolve().parents[1],
+                        check=False,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
+                    subprocess.run(["qpdf", "--check", str(output_pdf)], check=True)
+                    extracted = subprocess.run(
+                        ["pdftotext", str(output_pdf), "-"],
+                        check=True,
+                        stdout=subprocess.PIPE,
+                    ).stdout.decode("utf-8")
+                    self.assertIn("13846", extracted)
+                    self.assertNotIn("3734", extracted)
+
+                    report = json.loads(report_path.read_text(encoding="utf-8"))
+                    assertions = report["layout_evidence"]["alignment_assertions"]
+                    assertion = assertions["assertions"][0]
+                    self.assertEqual(assertions["status"], "ok")
+                    self.assertEqual(assertions["align"], align)
+                    self.assertEqual(assertions["checked_pairs"], 1)
+                    self.assertTrue(assertion["passed"])
+                    self.assertEqual(
+                        assertion["checked_edge"],
+                        "x_min" if align == "left" else "x_max",
+                    )
+                    self.assertEqual(assertion["checked_delta"], "0")
+                    self.assertNotIn("3734", json.dumps(report))
+                    self.assertNotIn("13846", json.dumps(report))
 
     def test_analyze_qdf_reports_feasibility(self):
         qdf = f.synthetic_qdf("3807", one_glyph_per_line=True)
@@ -771,10 +807,14 @@ class PdfGlyphReplaceTests(unittest.TestCase):
 
         self.assertEqual(left["status"], "ok")
         self.assertEqual(left["assertions"][0]["contract"], "left_edge")
+        self.assertEqual(left["assertions"][0]["checked_edge"], "x_min")
+        self.assertEqual(left["assertions"][0]["checked_delta"], "0.2")
         self.assertEqual(left["assertions"][0]["left_delta"], "0.2")
         self.assertTrue(left["assertions"][0]["passed"])
         self.assertEqual(right["status"], "ok")
         self.assertEqual(right["assertions"][0]["contract"], "right_edge")
+        self.assertEqual(right["assertions"][0]["checked_edge"], "x_max")
+        self.assertEqual(right["assertions"][0]["checked_delta"], "0.3")
         self.assertEqual(right["assertions"][0]["right_delta"], "0.3")
         self.assertTrue(right["assertions"][0]["passed"])
         self.assertNotIn("37.34", str(left))
@@ -804,6 +844,8 @@ class PdfGlyphReplaceTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "warning")
         self.assertFalse(payload["assertions"][0]["passed"])
+        self.assertEqual(payload["assertions"][0]["checked_edge"], "x_min")
+        self.assertEqual(payload["assertions"][0]["checked_delta"], "12")
         self.assertIn("failed", payload["warnings"][0])
 
     def test_collect_bbox_evidence_warns_when_pdftotext_is_missing(self):

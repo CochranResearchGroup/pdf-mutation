@@ -128,7 +128,9 @@ artifact paths, sizes, short hashes, and warnings, but not extracted bbox text.
 If `pdftotext` is missing or bbox extraction fails, mutation still succeeds and
 the report records a layout-evidence warning. For direct writes, exact mode
 records before/after extraction counts, while `--align left` and `--align right`
-record numeric bbox edge deltas and pass/fail assertions.
+record numeric bbox edge deltas and pass/fail assertions. Failed edge
+assertions name the checked coordinate (`x_min` for left alignment, `x_max` for
+right alignment) and the measured delta without embedding decoded document text.
 
 ## Synthetic Fixtures
 
@@ -162,7 +164,9 @@ pdftotext work/public-length-right.pdf - | rg '13846|3734'
 
 The public length-changing smoke should report `layout_evidence.status: "ok"`
 and `alignment_assertions.status: "ok"` for both `--align left` and
-`--align right`.
+`--align right`. The test suite also exercises the same public fixture shape
+with the replacement target at the beginning, middle, and end of a
+one-glyph-per-line text object.
 
 The same helper is available from Python:
 
