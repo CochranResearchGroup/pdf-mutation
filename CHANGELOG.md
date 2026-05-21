@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.1.7 | Blocker Summary Reports
+
+Maintenance release that makes unsupported split-object and mixed-font cases
+easier to triage from non-sensitive plan and audit JSON.
 
 ### Added
 
