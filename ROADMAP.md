@@ -201,7 +201,7 @@ Progress:
 
 ### M12 | Product Release Candidate
 
-Status: IN PROGRESS
+Status: DONE
 
 Goal: Cut the next release only after the planner/apply product loop is
 coherent.
@@ -221,6 +221,36 @@ Progress:
 - Prepared `v0.1.4` release notes for the planner/apply package boundary.
 - Marked M11 complete after the engine, reporting, layout, adapter, and CLI
   boundaries landed with CI coverage.
+- Released `v0.1.4` from validated `main` commit
+  `1df8824d8b2af213632ea3c9e5e2b1f036e75ccb`.
+- Verified tag CI, uploaded GitHub release assets, and completed a
+  published-wheel smoke from a fresh `/tmp` virtual environment.
+- Updated release validation to keep private amount-like fixtures plan-only
+  instead of creating amount-mutated private PDF artifacts.
+
+### M13 | Public Length-Changing Fixture
+
+Status: PLANNED
+
+Goal: Replace private amount-like smoke coverage with a public, synthetic PDF
+fixture that exercises length-changing layout behavior safely.
+
+Scope:
+- Generate a non-sensitive PDF fixture from `pdf-fixture-qdf` or an equivalent
+  tracked fixture recipe.
+- Exercise supported `--align left` and `--align right` behavior against that
+  public fixture, including `--bbox-dir` report evidence.
+- Keep private financial exemplars restricted to exact-token replacement and
+  plan-only unsupported cases.
+- Add release-checklist commands that can run without private PDFs.
+
+Acceptance Criteria:
+- A maintainer can validate length-changing replacement behavior from a public
+  fixture alone.
+- The public smoke verifies qpdf validity, extracted replacement text, and bbox
+  edge assertions without embedding decoded document text in reports.
+- README and release checklist no longer depend on private amount-like PDFs for
+  positive length-changing evidence.
 
 ## Supporting Infrastructure Lane
 
